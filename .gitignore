@@ -33,3 +33,6 @@
 
 # local makefile config
 /local.mk
+
+# output binary
+/counter
