@@ -1,3 +1,5 @@
+-include local.mk
+
 OPT := -O3
 # Leo really doubts -mavx2 helps anything, but one can
 # disable avx512 tests by enforcing -mavx2
