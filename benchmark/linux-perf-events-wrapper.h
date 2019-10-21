@@ -4,15 +4,15 @@
 #include <unordered_map>
 #ifdef __linux__
 #include "linux-perf-events.h"
+#else
+#define PERF_TYPE_HARDWARE 0
 #endif
 
-#ifdef __linux__
-typedef LinuxEvents<PERF_TYPE_HARDWARE> EventClass;
-#endif
-
-class LinuxEventsWrapper {
+template <int TYPE>
+class LinuxEventsWrapperT {
+  using EventClass = LinuxEvents<TYPE>;
   public:
-    LinuxEventsWrapper(const std::vector<int> event_codes) {
+    LinuxEventsWrapperT(const std::vector<int> event_codes) {
 #ifdef __linux__
       for(int ecode: event_codes) {
         event_obj.emplace(ecode, std::shared_ptr<EventClass>(new EventClass(ecode)));
@@ -23,14 +23,14 @@ class LinuxEventsWrapper {
     void start() {
 #ifdef __linux__
       for (const auto& [ecode, ptr]: event_obj) {
-        ptr->start();  
+        ptr->start();
       }
 #endif
     }
     void end() {
 #ifdef __linux__
       for (const auto& [ecode, ptr]: event_obj) {
-        event_res[ecode] = ptr->end();  
+        event_res[ecode] = ptr->end();
       }
 #endif
     }
@@ -48,3 +48,5 @@ class LinuxEventsWrapper {
     std::unordered_map<int, unsigned long> event_res;
 #endif
 };
+
+using LinuxEventsWrapper = LinuxEventsWrapperT<PERF_TYPE_HARDWARE>;

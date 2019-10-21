@@ -3,6 +3,7 @@
 #include "ztimer.h"
 #ifdef __AVX2__
 #include "fastscancount_avx2.h"
+#include "fastscancount_avx2b.h"
 #endif
 #ifdef __AVX512F__
 #include "fastscancount_avx512.h"
@@ -14,12 +15,69 @@
 #include <cstdio>
 #include <immintrin.h>
 #include <iostream>
+#include <iomanip>
 #include <vector>
 #include <stdexcept>
 
 #define REPEATS 10
+#define START_THRESHOLD  1
+#define END_THRESHOLD   11
 #define RUNNINGTESTS
 
+constexpr int NAME_WIDTH = 25;
+constexpr int  COL_WIDTH = 16;
+
+// extra perf events
+constexpr int EVENT_L1D_REPL          =     0x151;
+constexpr int EVENT_UOPS_ISSUED       =     0x10e;
+constexpr int EVENT_PEND_MISS         =     0x148;
+constexpr int EVENT_PEND_MISS_CYCLES  = 0x1000148;
+
+
+#if defined(__linux__) && !defined(NO_COUNTERS)
+#define USE_COUNTERS
+#endif
+
+std::vector<int> evts = {
+#ifdef USE_COUNTERS
+                          PERF_COUNT_HW_CPU_CYCLES,
+                          PERF_COUNT_HW_INSTRUCTIONS,
+                          PERF_COUNT_HW_BRANCH_MISSES,
+#endif
+};
+
+LinuxEventsWrapper unified(evts);
+
+/* a function that returns the normalized event value given the value, cycles and sum */
+using raw_extractor = double (double val, double cycles, size_t sum);
+
+struct raw_event {
+  int event_code;
+  const char* desc;
+  raw_extractor* extractor;
+};
+
+raw_event raw_events[] = {
+#ifdef USE_COUNTERS
+  { EVENT_L1D_REPL,     "l1 repl/element",   [](double val, double cycles, size_t sum) -> double { return val / sum;    } },
+  // { EVENT_UOPS_ISSUED,     "uops/cycle",     [](double val, double cycles, size_t sum) -> double { return val / cycles; } },
+  { EVENT_UOPS_ISSUED,     "uops/elem",      [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  { EVENT_PEND_MISS,       "pmiss/elem",     [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  { EVENT_PEND_MISS_CYCLES,"pmiss_cyc/elem", [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+#endif
+};
+
+std::vector<int> get_raw_wrapper() {
+  std::vector<int> ret;
+  for (auto& raw_evt : raw_events) {
+    ret.push_back(raw_evt.event_code);
+  }
+  return ret;
+}
+
+LinuxEventsWrapperT<PERF_TYPE_RAW> raw = get_raw_wrapper();
+
+namespace fastscancount {
 void scancount(const std::vector<const std::vector<uint32_t>*> &data,
                std::vector<uint32_t> &out, size_t threshold) {
   uint64_t largest = 0;
@@ -40,16 +98,19 @@ void scancount(const std::vector<const std::vector<uint32_t>*> &data,
       out.push_back(i);
   }
 }
+}
 
-void calc_boundaries(uint32_t largest, uint32_t range_size, 
-                    const std::vector<uint32_t>& data, 
+using fastscancount::scancount;
+
+void calc_boundaries(uint32_t largest, uint32_t range_size,
+                    const std::vector<uint32_t>& data,
                     std::vector<uint32_t>& range_ends) {
   if (!range_size) {
     throw std::runtime_error("range_size must be > 0");
   }
   uint32_t end = 0;
   range_ends.clear();
-  
+
   for (uint32_t start = 0; start <= largest; start += range_size) {
     uint32_t curr_max = std::min(largest, start + range_size - 1);
     while (end < data.size() && data[end] <= curr_max) {
@@ -57,7 +118,7 @@ void calc_boundaries(uint32_t largest, uint32_t range_size,
     }
     range_ends.push_back(end);
   }
-} 
+}
 
 const uint32_t range_size_avx512 = 40000;
 
@@ -71,14 +132,14 @@ void calc_alldata_boundaries(const std::vector<std::vector<uint32_t>>& data,
     if (!v.empty() && v[v.size() - 1] > largest) largest = v[v.size() - 1];
   }
   for (unsigned i = 0; i < data.size(); ++i) {
-    calc_boundaries(largest, range_size, data[i], range_ends[i]); 
+    calc_boundaries(largest, range_size, data[i], range_ends[i]);
   }
 }
 
 template <typename F>
 void test(F f, const std::vector<const std::vector<uint32_t>*>& data_ptrs,
           std::vector<uint32_t>& answer, unsigned threshold, const std::string &name) {
-  scancount(data_ptrs, answer, threshold);
+  fastscancount::fastscancount(data_ptrs, answer, threshold);
   size_t s1 = answer.size();
   auto a1 (answer);
   std::sort(a1.begin(), a1.end());
@@ -89,7 +150,18 @@ void test(F f, const std::vector<const std::vector<uint32_t>*>& data_ptrs,
   std::sort(a2.begin(), a2.end());
   if (a1 != a2) {
     std::cout << "s1: " << s1 << " s2: " << s2 << std::endl;
-    for(size_t j = 0; j < std::min(s1, s2); j++) {
+    auto minsize = std::min(s1, s2);
+    if (std::equal(a1.begin(), a1.begin() + minsize, a2.begin())) {
+      assert(s1 != s2);
+      // one array is a prefix of the other, don't print them all out
+      bool refextra = s1 > s2;
+      auto &extra = refextra ? a1 : a2;
+      for (size_t i = minsize; i < std::max(s1, s2); i++) {
+        std::cout << i << " " << extra[i] << '\n';
+      }
+      throw std::runtime_error(std::string("bug (") + (refextra ? "ref" : "answer") + " had extra elems): " + name);
+    }
+    for(size_t j = 0; j < minsize; j++) {
       std::cout << j << " " << a1[j] << " vs " << a2[j] ;
 
       if(a1[j] != a2[j]) std::cout << " oh oh ";
@@ -101,30 +173,42 @@ void test(F f, const std::vector<const std::vector<uint32_t>*>& data_ptrs,
 
 template <typename F>
 void bench(F f, const std::string &name,
-           LinuxEventsWrapper &unified,
            float& elapsed,
            std::vector<uint32_t> &answer, size_t sum, size_t expected,
            bool print) {
   WallClockTimer tm;
   unified.start();
+  raw.start();
   f();
+  raw.end();
   unified.end();
   elapsed += tm.split();
   if (answer.size() != expected)
     std::cerr << "bug: expected " << expected << " but got " << answer.size()
               << "\n";
-#ifdef __linux__
+#ifdef USE_COUNTERS
   if (print) {
     double cycles = unified.get_result(PERF_COUNT_HW_CPU_CYCLES);
     double instructions = unified.get_result(PERF_COUNT_HW_INSTRUCTIONS);
     double misses = unified.get_result(PERF_COUNT_HW_BRANCH_MISSES);
-    std::cout << name << std::endl;
-    std::cout << cycles / sum << " cycles/element " << std::endl;
-    std::cout << instructions / cycles << " instructions/cycles " << std::endl;
-    std::cout << misses / sum << " miss/element " << std::endl;
+    double l1rep = raw.get_result(EVENT_L1D_REPL);
+    double uops = raw.get_result(EVENT_UOPS_ISSUED);
+    std::cout << std::setw(NAME_WIDTH) << name;
+    std::ios_base::fmtflags f(std::cout.flags());
+    std::cout << std::fixed << std::setprecision(4);
+    std::cout << std::setw(COL_WIDTH) << cycles / sum;
+    std::cout << std::setw(COL_WIDTH) << instructions / cycles;
+    std::cout << std::setw(COL_WIDTH) << misses / sum;
+    for (auto& raw_evt : raw_events) {
+      std::cout << std::setw(COL_WIDTH) << raw_evt.extractor(raw.get_result(raw_evt.event_code), cycles, sum);
+    }
+    std::cout.flags(f);
+    std::cout << '\n';
   }
 #endif
 }
+
+
 
 void demo_data(const std::vector<std::vector<uint32_t>>& data,
               const std::vector<std::vector<uint32_t>>& queries,
@@ -139,17 +223,6 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
 
   std::vector<uint32_t> answer;
   answer.reserve(N);
-
-  std::vector<int> evts = {
-#ifdef __linux__
-                           PERF_COUNT_HW_CPU_CYCLES,
-                           PERF_COUNT_HW_INSTRUCTIONS,
-                           PERF_COUNT_HW_BRANCH_MISSES,
-                           PERF_COUNT_HW_CACHE_REFERENCES,
-                           PERF_COUNT_HW_CACHE_MISSES
-#endif
-                          };
-  LinuxEventsWrapper unified(evts);
 
   std::vector<std::vector<uint32_t>> range_boundaries;
   calc_alldata_boundaries(data, range_boundaries, range_size_avx512);
@@ -169,7 +242,7 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
     for (uint32_t idx : query_elem) {
       if (idx >= data.size()) {
         std::stringstream err;
-        err << "Inconsistent data, posting " << idx << 
+        err << "Inconsistent data, posting " << idx <<
                " is >= # of postings " << data.size() << " query id " << qid;
         throw std::runtime_error(err.str());
       }
@@ -213,42 +286,80 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
         [&]() {
           scancount(data_ptrs, answer, threshold);
         },
-        "baseline scancount", unified, elapsed, answer, sum,
+        "baseline scancount", elapsed, answer, sum,
         expected, last);
 
     bench(
         [&]() {
           fastscancount::fastscancount(data_ptrs, answer, threshold);
         },
-        "optimized cache-sensitive scancount", unified, elapsed_fast, answer, sum,
+        "cache-sensitive scancount", elapsed_fast, answer, sum,
         expected, last);
 #ifdef __AVX2__
     bench(
         [&]() {
           fastscancount::fastscancount_avx2(data_ptrs, answer, threshold);
         },
-        "AVX2-based scancount", unified, elapsed_avx, answer, sum, expected, last);
+        "AVX2-based scancount", elapsed_avx, answer, sum, expected, last);
 #endif
 #ifdef __AVX512F__
     bench(
         [&]() {
           fastscancount::fastscancount_avx512(range_size_avx512, data_ptrs, range_ptrs, answer, threshold);
         },
-        "AVX512-based scancount", unified, elapsed_avx512, answer, sum, expected, last);
+        "AVX512-based scancount", elapsed_avx512, answer, sum, expected, last);
 #endif
   }
   std::cout << "Elems per millisecond:" << std::endl;
-  std::cout << "scancount: " << (sum_total/(elapsed/1e3)) << std::endl; 
-  std::cout << "fastscancount: " << (sum_total/(elapsed_fast/1e3)) << std::endl; 
+  std::cout << "scancount: " << (sum_total/(elapsed/1e3)) << std::endl;
+  std::cout << "fastscancount: " << (sum_total/(elapsed_fast/1e3)) << std::endl;
 #ifdef __AVX2__
-  std::cout << "fastscancount_avx2: " << (sum_total/(elapsed_avx/1e3)) << std::endl; 
+  std::cout << "fastscancount_avx2: " << (sum_total/(elapsed_avx/1e3)) << std::endl;
 #endif
 #ifdef __AVX512F__
-  std::cout << "fastscancount_avx512: " << (sum_total/(elapsed_avx512/1e3)) << std::endl; 
+  std::cout << "fastscancount_avx512: " << (sum_total/(elapsed_avx512/1e3)) << std::endl;
 #endif
 
 }
 
+
+void print_headers() {
+  std::cout << std::setw(NAME_WIDTH) << "algorithm";
+  std::cout << std::setw(COL_WIDTH)  << "cycles/element";
+  std::cout << std::setw(COL_WIDTH)  << "instr/cycle";
+  std::cout << std::setw(COL_WIDTH)  << "miss/element";
+  for (auto &raw_evt : raw_events) {
+    std::cout << std::setw(COL_WIDTH)  << raw_evt.desc;
+  }
+  std::cout << '\n';
+}
+
+#define OUT(x) std::cout << #x ": " << x << '\n';
+
+#ifdef RUNNINGTESTS
+#define TEST(fn, ...) \
+    test(       \
+      [&](){    \
+        fastscancount::fn(data_ptrs, answer, threshold, ## __VA_ARGS__);     \
+      }, data_ptrs, answer, threshold, #fn  \
+    );
+#else
+#define TEST(fn)
+#endif
+
+#define BENCH(fn, name, elapsed, ...) \
+  bench(                \
+    [&]() {             \
+      fastscancount::fn(data_ptrs, answer, threshold, ## __VA_ARGS__ ); \
+    },                  \
+    name, elapsed, answer, sum, expected, last);
+
+#define BENCH_LOOP(fn, name, elapsed, ...)  \
+  TEST(fn, ## __VA_ARGS__) \
+  for (size_t t = 0; t < REPEATS; t++) {    \
+    bool last = (t == REPEATS - 1);         \
+    BENCH(fn, name, elapsed, ## __VA_ARGS__ ); \
+  } \
 
 void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) {
   std::vector<std::vector<uint32_t>> data(array_count);
@@ -265,11 +376,18 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
     }
     std::sort(v.begin(), v.end());
     v.resize(std::distance(v.begin(), unique(v.begin(), v.end())));
+    // make each vector a multiple of unroll, simplying other logic
+    while (v.size() % fastscancount::unroll != 0) {
+      v.pop_back();
+    }
+    v.shrink_to_fit();
     sum += v.size();
     data_ptrs.push_back(&data[c]);
   }
 
+  OUT(sum);
 
+  // aux data for AVX-512
   std::vector<std::vector<uint32_t>> range_boundaries;
   calc_alldata_boundaries(data, range_boundaries, range_size_avx512);
   std::vector<const std::vector<uint32_t>*> range_ptrs;
@@ -277,69 +395,30 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
     range_ptrs.push_back(&range_boundaries[c]);
   }
 
-  std::vector<int> evts = {
-#ifdef __linux__
-                           PERF_COUNT_HW_CPU_CYCLES,
-                           PERF_COUNT_HW_INSTRUCTIONS,
-                           PERF_COUNT_HW_BRANCH_MISSES,
-                           PERF_COUNT_HW_CACHE_REFERENCES,
-                           PERF_COUNT_HW_CACHE_MISSES
-#endif
-                          };
-  LinuxEventsWrapper unified(evts);
-  float elapsed = 0, elapsed_fast = 0, elapsed_avx = 0, elapsed_avx512 = 0;
-  scancount(data_ptrs, answer, threshold);
+  // aux data for avx2b
+  auto avx2b_aux = fastscancount::implb::get_all_aux(data_ptrs);
+
+  float elapsed = 0, elapsed_fast = 0, elapsed_avx = 0, elapsed_avx512 = 0, dummy = 0;
+  fastscancount::scancount(data_ptrs, answer, threshold);
   const size_t expected = answer.size();
   std::cout << "Got " << expected << " hits\n";
   size_t sum_total = sum * REPEATS;
-  for (size_t t = 0; t < REPEATS; t++) {
-    bool last = (t == REPEATS - 1);
 
-    bench(
-        [&]() {
-          scancount(data_ptrs, answer, threshold);
-        },
-        "baseline scancount", unified, elapsed, answer, sum,
-        expected, last);
-  }
+  print_headers();
 
-  for (size_t t = 0; t < REPEATS; t++) {
-    bool last = (t == REPEATS - 1);
+  // BENCH_LOOP(scancount, "baseline scancount", elapsed);
 
-#ifdef RUNNINGTESTS
-    test(
-      [&](){
-        fastscancount::fastscancount(data_ptrs, answer, threshold);
-      }, data_ptrs, answer, threshold, "fastscancount"
-    );
-#endif
-
-    bench(
-        [&]() {
-          fastscancount::fastscancount(data_ptrs, answer, threshold);
-        },
-        "optimized cache-sensitive scancount", unified, elapsed_fast, answer, sum,
-        expected, last);
-  }
-
-  for (size_t t = 0; t < REPEATS; t++) {
-    bool last = (t == REPEATS - 1);
+  // BENCH_LOOP(fastscancount, "fastscancount", elapsed_fast);
 
 #ifdef __AVX2__
-#ifdef RUNNINGTESTS
-    test(
-      [&](){
-        fastscancount::fastscancount_avx2(data_ptrs, answer, threshold);
-      }, data_ptrs, answer, threshold, "fastscancount_avx2"
-    );
+  // BENCH_LOOP(fastscancount_avx2,  "AVX2-based scancount", elapsed_avx);
+
+  // BENCH_LOOP(fastscancount_avx2b<fastscancount::record_hits_c>, "Try2 AVX2 in C", dummy, avx2b_aux);
+
+  BENCH_LOOP(fastscancount_avx2b<fastscancount::record_hits_asm_branchy>, "AVX2 in ASM branchy", dummy, avx2b_aux);
+
+  BENCH_LOOP(fastscancount_avx2b<fastscancount::record_hits_asm_branchless>, "AVX2 in ASM branchless", dummy, avx2b_aux);
 #endif
-    bench(
-        [&]() {
-          fastscancount::fastscancount_avx2(data_ptrs, answer, threshold);
-        },
-        "AVX2-based scancount", unified, elapsed_avx, answer, sum, expected, last);
-#endif
-  }
 
   for (size_t t = 0; t < REPEATS; t++) {
     bool last = (t == REPEATS - 1);
@@ -356,19 +435,21 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
         [&]() {
           fastscancount::fastscancount_avx512(range_size_avx512, data_ptrs, range_ptrs, answer, threshold);
         },
-        "AVX512-based scancount", unified, elapsed_avx512, answer, sum, expected, last);
+        "AVX512-based scancount", elapsed_avx512, answer, sum, expected, last);
 #endif
   }
 
   std::cout << "Elems per millisecond:" << std::endl;
-  std::cout << "scancount: " << (sum_total/(elapsed/1e3)) << std::endl; 
-  std::cout << "fastscancount: " << (sum_total/(elapsed_fast/1e3)) << std::endl; 
+  std::cout << "scancount: " << (sum_total/(elapsed/1e3)) << std::endl;
+  std::cout << "fastscancount: " << (sum_total/(elapsed_fast/1e3)) << std::endl;
 #ifdef __AVX2__
-  std::cout << "fastscancount_avx2: " << (sum_total/(elapsed_avx/1e3)) << std::endl; 
+  std::cout << "fastscancount_avx2: " << (sum_total/(elapsed_avx/1e3)) << std::endl;
 #endif
 #ifdef __AVX512F__
-  std::cout << "fastscancount_avx512: " << (sum_total/(elapsed_avx512/1e3)) << std::endl; 
+  std::cout << "fastscancount_avx512: " << (sum_total/(elapsed_avx512/1e3)) << std::endl;
 #endif
+
+  std::cout << std::flush;
 }
 
 void usage(const std::string& err="") {
@@ -379,12 +460,12 @@ void usage(const std::string& err="") {
 }
 
 int main(int argc, char *argv[]) {
-  // A very naive way to process arguments, 
+  // A very naive way to process arguments,
   // but it's ok unless we need to extend it substantially.
   if (argc != 1) {
     if (argc != 7) {
       usage("");
-      return EXIT_FAILURE; 
+      return EXIT_FAILURE;
     }
     std::string postings_file, queries_file;
     int threshold = -1;
@@ -399,15 +480,15 @@ int main(int argc, char *argv[]) {
     }
     if (postings_file.empty() || queries_file.empty() || threshold < 0) {
       usage("Specify queries, postings, and the threshold!");
-      return EXIT_FAILURE; 
+      return EXIT_FAILURE;
     }
-    std::vector<uint32_t> tmp; 
+    std::vector<uint32_t> tmp;
     std::vector<std::vector<uint32_t>> data;
     {
       MaropuGapReader drdr(postings_file);
       if (!drdr.open()) {
         usage("Cannot open: " + postings_file);
-        return EXIT_FAILURE; 
+        return EXIT_FAILURE;
       }
       while (drdr.loadIntegers(tmp)) {
         data.push_back(tmp);
@@ -418,14 +499,14 @@ int main(int argc, char *argv[]) {
       MaropuGapReader qrdr(queries_file);
       if (!qrdr.open()) {
         usage("Cannot open: " + queries_file);
-        return EXIT_FAILURE; 
+        return EXIT_FAILURE;
       }
       while (qrdr.loadIntegers(tmp)) {
         queries.push_back(tmp);
       }
     }
-              
-    try { 
+
+    try {
       demo_data(data, queries, threshold);
     } catch (const std::exception& e) {
       std::cerr << "Exception: " << e.what() << std::endl;
@@ -435,7 +516,8 @@ int main(int argc, char *argv[]) {
     try {
       // Previous demo with threshold 3
       //demo_random(20000000, 50000, 100, 3);
-      for (unsigned k = 1; k < 10; ++k) {
+      for (unsigned k = START_THRESHOLD; k < END_THRESHOLD; ++k) {
+        std::cout << "RAND_MAX is " << RAND_MAX << std::endl;
         std::cout << "Demo threshold:" << k << std::endl;
         demo_random(20000000, 50000, 100, k);
         std::cout << "=======================" << std::endl;

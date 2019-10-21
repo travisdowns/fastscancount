@@ -16,7 +16,7 @@
 #include <vector>
 
 namespace fastscancount {
-namespace {
+namespace impla {
 // credit: implementation and design by Travis Downes
 static inline size_t find_next_gt(uint8_t *array, const size_t size,
                                   const uint8_t threshold) {
@@ -47,7 +47,7 @@ void populate_hits_avx(std::vector<uint8_t> &counters, size_t range,
                        size_t threshold, size_t start,
                        std::vector<uint32_t> &out) {
   uint8_t *array = counters.data();
-
+  // printf("start: %zu end: %zu\n", start, start + range);
   size_t ro = range;
   while (true) {
     size_t next = find_next_gt(array, range, (uint8_t)threshold);
@@ -71,7 +71,6 @@ void update_counters(const uint32_t *&it_, uint8_t *counters,
 
 void update_counters_final(const uint32_t *&it_, const uint32_t *end,
                            uint8_t *counters) {
-  uint64_t e;
   const uint32_t *it = it_;
   for (; it != end; it++) {
     counters[*it]++;
@@ -82,6 +81,8 @@ void update_counters_final(const uint32_t *&it_, const uint32_t *end,
 
 void fastscancount_avx2(const std::vector<const std::vector<uint32_t>*> &data,
                         std::vector<uint32_t> &out, uint8_t threshold) {
+
+  using namespace impla;
   const size_t cache_size = 40000;
   std::vector<uint8_t> counters(cache_size);
   out.clear();
@@ -107,7 +108,7 @@ void fastscancount_avx2(const std::vector<const std::vector<uint32_t>*> &data,
       largest = (*data[c])[data[c]->size() - 1];
   }
   auto cdata = counters.data();
-  for (uint32_t start = 0; start < largest; start += cache_size) {
+  for (uint32_t start = 0; start <= largest; start += cache_size) {
     memset(cdata, 0, cache_size * sizeof(counters[0]));
     for (auto &id : iter_data) {
       // determine if the loop will end because we get to the end of
