@@ -19,9 +19,27 @@
 #include <vector>
 #include <stdexcept>
 
+//////////////////////
+// demo mode params //
+//////////////////////
+
+/* the number of times to run each benchmark in demo mode */
 #define REPEATS 10
 #define START_THRESHOLD  1
 #define END_THRESHOLD   11
+
+//////////////////////
+// data mode params //
+//////////////////////
+
+/* the maximum number of queries to read from queries.bin */
+constexpr size_t MAX_QUERIES = 100;
+
+constexpr bool PRINT_ALL = true;
+
+/////////////////////
+// all mode params //
+/////////////////////
 #define RUNNINGTESTS
 
 constexpr int NAME_WIDTH = 25;
@@ -208,7 +226,43 @@ void bench(F f, const std::string &name,
 #endif
 }
 
+void print_headers() {
+  std::cout << std::setw(NAME_WIDTH) << "algorithm";
+  std::cout << std::setw(COL_WIDTH)  << "cycles/element";
+  std::cout << std::setw(COL_WIDTH)  << "instr/cycle";
+  std::cout << std::setw(COL_WIDTH)  << "miss/element";
+  for (auto &raw_evt : raw_events) {
+    std::cout << std::setw(COL_WIDTH)  << raw_evt.desc;
+  }
+  std::cout << '\n';
+}
 
+#ifdef RUNNINGTESTS
+#define TEST(fn, ...) \
+    test(       \
+      [&](){    \
+        fastscancount::fn(data_ptrs, answer, threshold, ## __VA_ARGS__);     \
+      }, data_ptrs, answer, threshold, #fn  \
+    );
+#else
+#define TEST(fn)
+#endif
+
+#define BENCH(fn, name, elapsed, ...) \
+  bench(                \
+    [&]() {             \
+      fastscancount::fn(data_ptrs, answer, threshold, ## __VA_ARGS__ ); \
+    },                  \
+    name, elapsed, answer, sum, expected, print);
+
+#define BENCHTEST(fn, name, elapsed, ...) TEST(fn, ## __VA_ARGS__) BENCH(fn, name, elapsed, ##__VA_ARGS__)
+
+#define BENCH_LOOP(fn, name, elapsed, ...)  \
+  TEST(fn, ## __VA_ARGS__) \
+  for (size_t t = 0; t < REPEATS; t++) {    \
+    bool print = (t == REPEATS - 1);         \
+    BENCH(fn, name, elapsed, ## __VA_ARGS__ ); \
+  } \
 
 void demo_data(const std::vector<std::vector<uint32_t>>& data,
               const std::vector<std::vector<uint32_t>>& queries,
@@ -227,14 +281,18 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
   std::vector<std::vector<uint32_t>> range_boundaries;
   calc_alldata_boundaries(data, range_boundaries, range_size_avx512);
 
+  auto avx2b_aux = fastscancount::implb::get_all_aux(data);
+
   std::vector<const std::vector<uint32_t>*> data_ptrs;
   std::vector<const std::vector<uint32_t>*> range_ptrs;
 
-  float elapsed = 0, elapsed_fast = 0, elapsed_avx = 0, elapsed_avx512 = 0;
+  float elapsed = 0, elapsed_fast = 0, elapsed_avx = 0, elapsed_avx512 = 0, dummy = 0;
 
   size_t sum_total = 0;
 
-  for (size_t qid = 0; qid < queries.size(); ++qid) {
+  size_t qcount = std::min(MAX_QUERIES, queries.size());
+
+  for (size_t qid = 0; qid < qcount; ++qid) {
     const auto& query_elem = queries[qid];
     data_ptrs.clear();
     range_ptrs.clear();
@@ -278,36 +336,32 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
 #endif
 
 #endif
-    std::cout << "Qid: " << qid << " got " << expected << " hits\n";
+    std::cout << "Qid: " << qid << " got " << expected << " hits [thresh = "
+        << threshold << ", array count = " << data_ptrs.size() << "]\n";
 
-    bool last = (qid == queries.size() - 1);
+    bool print = PRINT_ALL || (qid == qcount - 1);
 
-    bench(
-        [&]() {
-          scancount(data_ptrs, answer, threshold);
-        },
-        "baseline scancount", elapsed, answer, sum,
-        expected, last);
+    if (print)
+      print_headers();
 
-    bench(
-        [&]() {
-          fastscancount::fastscancount(data_ptrs, answer, threshold);
-        },
-        "cache-sensitive scancount", elapsed_fast, answer, sum,
-        expected, last);
+    BENCHTEST(scancount, "baseline scancount", elapsed);
+    BENCHTEST(fastscancount, "cache-sensitive scancount", elapsed_fast);
+
 #ifdef __AVX2__
-    bench(
-        [&]() {
-          fastscancount::fastscancount_avx2(data_ptrs, answer, threshold);
-        },
-        "AVX2-based scancount", elapsed_avx, answer, sum, expected, last);
+    BENCHTEST(fastscancount_avx2, "AVX2-based scancount", elapsed_avx);
+
+    BENCHTEST(fastscancount_avx2b<fastscancount::record_hits_c>, "Try2 AVX2 in C", dummy, avx2b_aux);
+
+    BENCHTEST(fastscancount_avx2b<fastscancount::record_hits_asm_branchy>, "AVX2 in ASM branchy", dummy, avx2b_aux);
+
+    BENCHTEST(fastscancount_avx2b<fastscancount::record_hits_asm_branchless>, "AVX2 in ASM branchless", dummy, avx2b_aux);
 #endif
 #ifdef __AVX512F__
     bench(
         [&]() {
           fastscancount::fastscancount_avx512(range_size_avx512, data_ptrs, range_ptrs, answer, threshold);
         },
-        "AVX512-based scancount", elapsed_avx512, answer, sum, expected, last);
+        "AVX512-based scancount", elapsed_avx512, answer, sum, expected, print);
 #endif
   }
   std::cout << "Elems per millisecond:" << std::endl;
@@ -323,43 +377,8 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
 }
 
 
-void print_headers() {
-  std::cout << std::setw(NAME_WIDTH) << "algorithm";
-  std::cout << std::setw(COL_WIDTH)  << "cycles/element";
-  std::cout << std::setw(COL_WIDTH)  << "instr/cycle";
-  std::cout << std::setw(COL_WIDTH)  << "miss/element";
-  for (auto &raw_evt : raw_events) {
-    std::cout << std::setw(COL_WIDTH)  << raw_evt.desc;
-  }
-  std::cout << '\n';
-}
 
 #define OUT(x) std::cout << #x ": " << x << '\n';
-
-#ifdef RUNNINGTESTS
-#define TEST(fn, ...) \
-    test(       \
-      [&](){    \
-        fastscancount::fn(data_ptrs, answer, threshold, ## __VA_ARGS__);     \
-      }, data_ptrs, answer, threshold, #fn  \
-    );
-#else
-#define TEST(fn)
-#endif
-
-#define BENCH(fn, name, elapsed, ...) \
-  bench(                \
-    [&]() {             \
-      fastscancount::fn(data_ptrs, answer, threshold, ## __VA_ARGS__ ); \
-    },                  \
-    name, elapsed, answer, sum, expected, last);
-
-#define BENCH_LOOP(fn, name, elapsed, ...)  \
-  TEST(fn, ## __VA_ARGS__) \
-  for (size_t t = 0; t < REPEATS; t++) {    \
-    bool last = (t == REPEATS - 1);         \
-    BENCH(fn, name, elapsed, ## __VA_ARGS__ ); \
-  } \
 
 void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) {
   std::vector<std::vector<uint32_t>> data(array_count);
@@ -396,7 +415,7 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
   }
 
   // aux data for avx2b
-  auto avx2b_aux = fastscancount::implb::get_all_aux(data_ptrs);
+  auto avx2b_aux = fastscancount::implb::get_all_aux(data);
 
   float elapsed = 0, elapsed_fast = 0, elapsed_avx = 0, elapsed_avx512 = 0, dummy = 0;
   fastscancount::scancount(data_ptrs, answer, threshold);
@@ -505,6 +524,8 @@ int main(int argc, char *argv[]) {
         queries.push_back(tmp);
       }
     }
+
+    std::cout << "Read " << data.size() << " posting arrays and " << queries.size() << " queries\n";
 
     try {
       demo_data(data, queries, threshold);

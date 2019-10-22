@@ -124,7 +124,8 @@ void populate_hits_avx(uint8_t *array, size_t range,
 }
 
 using data_array = std::vector<uint32_t>;
-using all_data = const std::vector<const data_array*>;
+using all_data = std::vector<data_array>;
+using data_ptrs = std::vector<const data_array *>;
 
 /**
  * Each chunk of data in an input array has an associated aux_chunk
@@ -148,7 +149,6 @@ struct aux_chunk {
  */
 struct avx2b_aux {
   uint32_t largest;
-
 
   /* a vector of how many times the counter increment loop has to run for each cache_size chunk */
   std::vector<aux_chunk> chunks;
@@ -271,10 +271,10 @@ all_aux get_all_aux(const all_data& data) {
   all_aux ret;
   ret.reserve(data.size());
   for (auto &d : data) {
-    ret.emplace_back(*d);
+    ret.emplace_back(d);
   }
   for (auto& aux : ret) {
-    assert(aux.chunks.size() == all_aux.front().chunks.size());
+    assert(aux.chunks.size() == ret.front().chunks.size());
   }
   return ret;
 }
@@ -289,7 +289,7 @@ all_aux get_all_aux_reordered(const all_data& data) {
   all_aux all = get_all_aux(data);
 
   std::vector<uint32_t> contiguous;
-  contiguous.reserve(data.size() * data.front()->size());
+  contiguous.reserve(data.size() * data.front().size());
   for (uint32_t rstart = 0, chunk = 0; rstart < MAX_ELEM; rstart += cache_size, chunk++) {
     for (auto& aux : all) {
       auto& chunkaux = aux.chunks.at(chunk);
@@ -323,7 +323,7 @@ alignas(64) uint8_t counters[cache_size * 2];
 using kernel_fn = void (const implb::aux_chunk* aux_ptr,
                         const implb::aux_chunk* aux_end,
                         uint32_t range_start,
-                        const implb::all_data &data);
+                        const implb::data_ptrs &data);
 
 extern "C" kernel_fn record_hits_asm_branchy;
 extern "C" kernel_fn record_hits_asm_branchless;
@@ -333,7 +333,7 @@ HEDLEY_NEVER_INLINE
 void record_hits_c(const implb::aux_chunk* aux_ptr,
                    const implb::aux_chunk* aux_end,
                    uint32_t range_start,
-                   const implb::all_data &data) {
+                   const implb::data_ptrs &data) {
   const uint32_t* eptr = aux_ptr->start_ptr;
   assert(eptr);
   size_t iters_left = aux_ptr->iter_count;
@@ -444,7 +444,7 @@ void copymem(T* HEDLEY_RESTRICT dest, const T* src, size_t count) {
  * Parameterized on K, the kernel function which does the core counter increment loop.
  */
 template <kernel_fn K>
-void fastscancount_avx2b(const implb::all_data &data, std::vector<uint32_t> &out,
+void fastscancount_avx2b(const implb::data_ptrs &data, std::vector<uint32_t> &out,
                          uint8_t threshold, const implb::all_aux& aux_info) {
 
   using namespace implb;
