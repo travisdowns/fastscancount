@@ -19,6 +19,7 @@
 #include <stdio.h>
 
 #include "hedley.h"
+#include "common.h"
 
 // #define DEBUGB 1
 
@@ -148,11 +149,13 @@ struct aux_chunk {
 struct avx2b_aux {
   uint32_t largest;
 
+
   /* a vector of how many times the counter increment loop has to run for each cache_size chunk */
   std::vector<aux_chunk> chunks;
 
   avx2b_aux(const data_array& array) : largest{array.back()} {
     assert(array.size() % unroll == 0);
+    assert(largest < MAX_ELEM);
     size_t pos = 0;
     chunks.reserve(largest / cache_size + 1);
     for (uint32_t rstart = 0; rstart <= largest; rstart += cache_size) {
@@ -270,7 +273,44 @@ all_aux get_all_aux(const all_data& data) {
   for (auto &d : data) {
     ret.emplace_back(*d);
   }
+  for (auto& aux : ret) {
+    assert(aux.chunks.size() == all_aux.front().chunks.size());
+  }
   return ret;
+}
+
+/**
+ * A version which gets the normal aux data on a per-input array
+ * basis, but then totally cheats and copies all the data such that
+ * it is linear when accessed by the counting algorithm.
+ */
+HEDLEY_NEVER_INLINE
+all_aux get_all_aux_reordered(const all_data& data) {
+  all_aux all = get_all_aux(data);
+
+  std::vector<uint32_t> contiguous;
+  contiguous.reserve(data.size() * data.front()->size());
+  for (uint32_t rstart = 0, chunk = 0; rstart < MAX_ELEM; rstart += cache_size, chunk++) {
+    for (auto& aux : all) {
+      auto& chunkaux = aux.chunks.at(chunk);
+      contiguous.insert(contiguous.end(), chunkaux.start_ptr, chunkaux.start_ptr + chunkaux.iter_count * unroll);
+    }
+  }
+
+  // just leak this for now
+  uint32_t* contigarray = new uint32_t[contiguous.size()];
+  std::copy(contiguous.begin(), contiguous.end(), contigarray);
+
+  uint32_t* cur = contigarray;
+  for (uint32_t rstart = 0, chunk = 0; rstart < MAX_ELEM; rstart += cache_size, chunk++) {
+    for (auto& aux : all) {
+      auto& chunkaux = aux.chunks.at(chunk);
+      chunkaux.start_ptr = cur;
+      cur += chunkaux.iter_count * unroll;
+    }
+  }
+
+  return all;
 }
 
 
