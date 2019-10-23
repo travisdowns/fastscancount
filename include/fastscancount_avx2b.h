@@ -43,12 +43,13 @@ namespace fastscancount {
 // credit: implementation and design by Travis Downes
 
 constexpr size_t cache_size = 40000 - 256;
-// constexpr size_t cache_size = 40000;
+constexpr size_t COUNTER_OFFSET = 64;
+constexpr size_t counters_size = COUNTER_OFFSET + cache_size * 2;
+
 static_assert(cache_size % 64 == 0, "should be a multiple of 64");
 
 constexpr size_t unroll = 16;
 
-constexpr size_t COUNTER_OFFSET = 64;
 
 namespace implb {
 
@@ -182,28 +183,28 @@ struct aux_view {
 /**
  * Auxilliary per-array data for avx2b algo.
  */
-struct avx2b_aux {
+template <typename T>
+struct avx2b_aux_t {
   uint32_t largest;
 
   /* pointer to the re-written data */
-  std::unique_ptr<uint32_t[]> data;
+  std::unique_ptr<T[]> data;
 
   /* a vector of how many times the counter increment loop has to run for each cache_size chunk */
   std::vector<aux_chunk> chunks;
 
-  avx2b_aux(const data_array& array, uint32_t global_largest) {
+  avx2b_aux_t(const data_array& array, uint32_t global_largest) {
 
     assert(!array.empty());  // some bugs with empty arrays
     this->largest = array.back();
 
-    using T = uint32_t;
     size_t pos = 0;
     size_t chunk_count = div_up(global_largest + 1, (uint32_t)cache_size);
     DBG(printf("chunk_count: %zu\n", chunk_count));
     size_t c = 0;
 
     // we rewrite the data into this vector
-    std::vector<uint32_t> rewritten;
+    std::vector<T> rewritten;
     rewritten.reserve(global_largest);
 
     // keep track of how many filer elements we write
@@ -258,21 +259,25 @@ struct avx2b_aux {
       assert(overshoot < cache_size); // this could happen for real data, need to fix "extended overshoot" to solve it
 
       size_t rw_index = rewritten.size();
-      //rewritten.insert(rewritten.end(), array.begin() + spos, array.begin() + pos);
       for (size_t i = spos; i < pos; i++) {
         uint32_t val = array.at(i) + COUNTER_OFFSET;
         assert(val >= rstart);
-        assert(val - rstart < 2 * cache_size);
+
+        // rebase the value to be relative to rstart (i.e., in the range [0, cache_size] + COUNTER_OFFSET)
+        val -= rstart;
+        assert(val <= std::numeric_limits<T>::max());
+        assert(val < counters_size);
+
         rewritten.push_back(val);
       }
       ssize_t filler_count = loops * unroll - (pos - spos); // amount extra we have to write
       filler_total += filler_count;
       assert(filler_count >= 0);
-      assert((filler_count == 0) || pos == array.size());
+      assert(filler_count == 0 || pos == array.size());
 
       // fill out the block with zeros for any filler elements - because of COUNTER_OFFSET
       // zeros write to an ignored part of the array and hence serve as no ops
-      rewritten.insert(rewritten.end(), filler_count, rstart);
+      rewritten.insert(rewritten.end(), filler_count, 0);
       // the amount written must be equal to the amount the counter code
       // will read
       size_t written_count = rewritten.size() - rw_index;
@@ -311,6 +316,8 @@ struct avx2b_aux {
     return { data.get(), minispan<const aux_chunk>::from(chunks) };
   }
 };
+
+using avx2b_aux = avx2b_aux_t<uint32_t>;
 
 struct all_aux {
   uint32_t largest; // the largest value found in any array
@@ -442,7 +449,7 @@ all_aux get_all_aux_reordered(const all_data& data) {
 } // implb namespace
 
 #define counter_base (counters + COUNTER_OFFSET)
-alignas(64) uint8_t counters[COUNTER_OFFSET + cache_size * 2];
+alignas(64) uint8_t counters[counters_size];
 
 using kernel_fn = void (const implb::aux_chunk* aux_ptr,
                         const implb::aux_chunk* aux_end,
@@ -467,11 +474,9 @@ void record_hits_c(const implb::aux_chunk* aux_ptr,
   do {
     for (int i = 0; i < unroll; i++) {
       uint32_t e = *eptr++;
-      size_t write_idx = e - range_start;
-      assert(e >= range_start);
-      assert(write_idx >= COUNTER_OFFSET || write_idx == 0);
-      assert(write_idx < sizeof(counters));
-      counters[e - range_start]++;
+      assert(e >= COUNTER_OFFSET || e == 0);
+      assert(e < sizeof(counters));
+      ++counters[e];
     }
 
     iters_left--;

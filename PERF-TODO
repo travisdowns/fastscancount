@@ -8,4 +8,8 @@ Notes on speedup progress:
 From a baseline of 3.5 elems per cycle (AVX2 original algo)
 
 Speedup   Speed (e/c)
+                 ~3.5   Initial.
 1.4x             ~2.5   Unrolling and prefetching in the counting loop (most attributable to prefetching)
+1.0x             ~2.5   Removing the sub from the core loop by doing it at static rewrite time. Amazingly
+                        while this saved one full instruction per element (from 4.7 to 3.7), performance
+                        didn't budge by more than 2%.

@@ -36,7 +36,6 @@ ALIGN   32
 %assign i 0
 %rep UNROLL
         mov     r8d, [rax + i * 4]
-        sub     r8d, edx
         add     byte [COUNTER_ARRAY + r8], 1
 %if     i == 0
         prefetcht0 [rax + 128]
@@ -104,7 +103,6 @@ ALIGN   32
 %assign i 0
 %rep UNROLL
         mov     r8d, dword [rax + i * 4]
-        sub     r8d, edx
         add     byte [COUNTER_ARRAY + r8], 1
 %assign i (i + 1)
 %endrep

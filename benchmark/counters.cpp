@@ -78,6 +78,7 @@ column_spec all_columns[] = {
   // you must always leave CPU_CYCLES enabled
   { HW_EVENT(CPU_CYCLES   ),                  "cycles/element", [](double val, double cycles, size_t sum) -> double { return val / sum;          } },
   { HW_EVENT(INSTRUCTIONS ),                  "instr/cycle",    [](double val, double cycles, size_t sum) -> double { return val / cycles; } },
+  { HW_EVENT(INSTRUCTIONS ),                  "instr/elem",     [](double val, double cycles, size_t sum) -> double { return val / sum; } },
   { HW_EVENT(BRANCH_MISSES),                  "miss/element",   [](double val, double cycles, size_t sum) -> double { return val / sum;          } },
   { {PERF_TYPE_RAW, EVENT_L1D_REPL,        }, "l1 repl/element",[](double val, double cycles, size_t sum) -> double { return val / sum;    } },
   { {PERF_TYPE_RAW, EVENT_UOPS_ISSUED,     }, "uops/cycle",     [](double val, double cycles, size_t sum) -> double { return val / cycles; } },
@@ -274,7 +275,8 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
   std::vector<const std::vector<uint32_t>*> data_ptrs;
   std::vector<const std::vector<uint32_t>*> range_ptrs;
 
-  float elapsed = 0, elapsed_fast = 0, elapsed_avx = 0, elapsed_avx512 = 0, dummy = 0;
+  float elapsed = 0, elapsed_fast = 0, elapsed_avx = 0,
+      elapsed_avx2bb = 0, elapsed_avx512 = 0, dummy = 0;
 
   size_t sum_total = 0;
 
@@ -340,7 +342,7 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
 
     BENCHTEST(fastscancount_avx2b<fastscancount::record_hits_c>, "Try2 AVX2 in C", dummy, avx2b_aux, query_elem);
 
-    BENCHTEST(fastscancount_avx2b<fastscancount::record_hits_asm_branchy>, "AVX2 in ASM branchy", dummy, avx2b_aux, query_elem);
+    BENCHTEST(fastscancount_avx2b<fastscancount::record_hits_asm_branchy>, "AVX2 in ASM branchy", elapsed_avx2bb, avx2b_aux, query_elem);
 
     BENCHTEST(fastscancount_avx2b<fastscancount::record_hits_asm_branchless>, "AVX2 in ASM branchless", dummy, avx2b_aux, query_elem);
 #endif
@@ -353,10 +355,11 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
 #endif
   }
   std::cout << "Elems per millisecond:" << std::endl;
-  std::cout << "scancount: " << (sum_total/(elapsed/1e3)) << std::endl;
-  std::cout << "fastscancount: " << (sum_total/(elapsed_fast/1e3)) << std::endl;
+  std::cout << "scancount:      " << (sum_total/(elapsed/1e3)) << std::endl;
+  std::cout << "fastscancount:  " << (sum_total/(elapsed_fast/1e3)) << std::endl;
 #ifdef __AVX2__
-  std::cout << "fastscancount_avx2: " << (sum_total/(elapsed_avx/1e3)) << std::endl;
+  std::cout << "fastscan_avx2:  " << (sum_total/(elapsed_avx/1e3)) << std::endl;
+  std::cout << "fastscan_avx2bb:" << (sum_total/(elapsed_avx2bb/1e3)) << std::endl;
 #endif
 #ifdef __AVX512F__
   std::cout << "fastscancount_avx512: " << (sum_total/(elapsed_avx512/1e3)) << std::endl;
@@ -418,7 +421,8 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
   std::vector<uint32_t> query_elem(data.size());
   std::iota(query_elem.begin(), query_elem.end(), 0);
 
-  float elapsed = 0, elapsed_fast = 0, elapsed_avx = 0, elapsed_avx512 = 0, dummy = 0;
+  float elapsed = 0, elapsed_fast = 0, elapsed_avx = 0,
+      elapsed_avx2bb = 0, elapsed_avx512 = 0, dummy = 0;
   fastscancount::scancount(data_ptrs, answer, threshold);
   const size_t expected = answer.size();
   std::cout << "Got " << expected << " hits\n";
@@ -428,14 +432,14 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
 
   // BENCH_LOOP(scancount, "baseline scancount", elapsed);
 
-  // BENCH_LOOP(fastscancount, "fastscancount", elapsed_fast);
+  BENCH_LOOP(fastscancount, "fastscancount", elapsed_fast);
 
 #ifdef __AVX2__
-  // BENCH_LOOP(fastscancount_avx2,  "AVX2-based scancount", elapsed_avx);
+  BENCH_LOOP(fastscancount_avx2,  "AVX2-based scancount", elapsed_avx);
 
   BENCH_LOOP(fastscancount_avx2b<fastscancount::record_hits_c>, "Try2 AVX2 in C", dummy, avx2b_aux, query_elem);
 
-  BENCH_LOOP(fastscancount_avx2b<fastscancount::record_hits_asm_branchy>, "AVX2 in ASM branchy", dummy, avx2b_aux, query_elem);
+  BENCH_LOOP(fastscancount_avx2b<fastscancount::record_hits_asm_branchy>, "AVX2 in ASM branchy", elapsed_avx2bb, avx2b_aux, query_elem);
 
   BENCH_LOOP(fastscancount_avx2b<fastscancount::record_hits_asm_branchless>, "AVX2 in ASM branchless", dummy, avx2b_aux, query_elem);
 #endif
@@ -460,10 +464,11 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
   }
 
   std::cout << "Elems per millisecond:" << std::endl;
-  std::cout << "scancount: " << (sum_total/(elapsed/1e3)) << std::endl;
-  std::cout << "fastscancount: " << (sum_total/(elapsed_fast/1e3)) << std::endl;
+  std::cout << "scancount:          " << (sum_total/(elapsed/1e3)) << std::endl;
+  std::cout << "fastscancount:      " << (sum_total/(elapsed_fast/1e3)) << std::endl;
 #ifdef __AVX2__
   std::cout << "fastscancount_avx2: " << (sum_total/(elapsed_avx/1e3)) << std::endl;
+  std::cout << "fastscan_avx2bb:    " << (sum_total/(elapsed_avx2bb/1e3)) << std::endl;
 #endif
 #ifdef __AVX512F__
   std::cout << "fastscancount_avx512: " << (sum_total/(elapsed_avx512/1e3)) << std::endl;
