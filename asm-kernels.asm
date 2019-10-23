@@ -84,10 +84,23 @@ record_hits_asm_branchless:
 
         mov     rax, [rdi + aux_chunk.start_ptr]  ; load eptr
         mov     r9d, [rdi + aux_chunk.iter_count] ; load loop count
-        mov     r10, [rdi + aux_chunk_size + aux_chunk.start_ptr]
 
 ALIGN   32
 .top:
+        mov     r10, [rdi + aux_chunk_size + aux_chunk.start_ptr]      ; next start_ptr (for prefetch)
+
+%assign offset 0
+%rep 2
+        prefetchnta [rax + offset]
+%assign offset (offset + 64)
+%endrep
+
+%assign offset 0
+%rep 7
+        prefetcht0 [r10 + offset]
+%assign offset (offset + 64)
+%endrep
+
 %assign i 0
 %rep UNROLL
         mov     r8d, dword [rax + i * 4]
@@ -104,20 +117,6 @@ ALIGN   32
         cmovz   rax, [rdi + aux_chunk_size + aux_chunk.start_ptr]      ; eptr = next ? *(start_ptr + 1) : eptr
         cmovz   rdi, r8                                                ; if next start_ptr++
         cmovz   r9d, [rdi + aux_chunk.iter_count]                      ; iters = *loop_count
-        mov     r10, [rdi + aux_chunk_size + aux_chunk.start_ptr]      ; next start_ptr (for prefetch)
-
-%assign offset 0
-%rep 2
-        prefetchnta [rax + offset]
-%assign offset (offset + 64)
-%endrep
-
-%assign offset 0
-%rep 7
-        prefetcht0 [r10 + offset]
-%assign offset (offset + 64)
-%endrep
-
 
 ; next array
         cmp     rsi, rdi          ; break if aux_ptr == aux_end

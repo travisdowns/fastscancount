@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <vector>
 #include <assert.h>
 
@@ -41,11 +42,13 @@ void findM(T& t, const char *name) {
 namespace fastscancount {
 // credit: implementation and design by Travis Downes
 
-constexpr size_t cache_size = 40000;
+constexpr size_t cache_size = 40000 - 256;
 // constexpr size_t cache_size = 40000;
 static_assert(cache_size % 64 == 0, "should be a multiple of 64");
 
 constexpr size_t unroll = 16;
+
+constexpr size_t COUNTER_OFFSET = 64;
 
 namespace implb {
 
@@ -144,68 +147,171 @@ struct aux_chunk {
   uint32_t overshoot;
 };
 
+template <typename T>
+struct minispan {
+  T* begin;
+  size_t size_;
+
+  const T& operator[](size_t i) const {
+    assert(i < size());
+    return begin[i];
+  }
+
+  size_t size() const { return size_; }
+
+  template <typename C>
+  static minispan<T> from(C& c) {
+    T* p = c.data();
+    size_t s = c.size();
+    return { p, s };
+  }
+};
+
+// template <typename T>
+struct aux_view {
+  const uint32_t* data;
+  minispan<const aux_chunk> chunks;
+};
+
 /**
  * Auxilliary per-array data for avx2b algo.
  */
 struct avx2b_aux {
   uint32_t largest;
 
+  /* pointer to the re-written data */
+  std::unique_ptr<uint32_t[]> data;
+
   /* a vector of how many times the counter increment loop has to run for each cache_size chunk */
   std::vector<aux_chunk> chunks;
 
-  avx2b_aux(const data_array& array) : largest{array.back()} {
-    assert(array.size() % unroll == 0);
-    assert(largest < MAX_ELEM);
+  avx2b_aux(const data_array& array, uint32_t global_largest) {
+
+    assert(!array.empty());  // some bugs with empty arrays
+    this->largest = array.back();
+
+    using T = uint32_t;
     size_t pos = 0;
-    chunks.reserve(largest / cache_size + 1);
-    for (uint32_t rstart = 0; rstart <= largest; rstart += cache_size) {
+    size_t chunk_count = div_up(global_largest + 1, (uint32_t)cache_size);
+    DBG(printf("chunk_count: %zu\n", chunk_count));
+    size_t c = 0;
+
+    // we rewrite the data into this vector
+    std::vector<uint32_t> rewritten;
+    rewritten.reserve(global_largest);
+
+    // keep track of how many filer elements we write
+    size_t filler_total = 0;
+
+    // and keep track of what happened to each chunk here
+    struct rw_meta {
+      // index into rewritten
+      size_t rw_index;
+      uint32_t iter_count;
+      uint32_t overshoot;
+    };
+    std::vector<rw_meta> meta;
+
+    for (uint32_t rstart = 0; rstart <= global_largest; rstart += cache_size, c++) {
       // striding by the unroll factor, look for the point in the array where
       // the current element falls outside of the range, this is where we transition
       // in the branch free loop
       uint32_t rend = rstart + cache_size; // exclusive
       size_t spos = pos;
-      pos += unroll; // minimum of one iteration
       while (pos < array.size() && array.at(pos) < rend) {
         pos += unroll;
       }
 
-      assert(pos <= array.size());
+      if (pos > array.size()) {
+        pos = array.size();
+      }
 
-      // printf("LOOPS: %zu: ", pos - spos);
-      size_t loops = (pos - spos) / unroll;
-      // printf("loops: %zu\n", loops);
-      if (loops == 0) {
-        DBG(printf("zero loops - size: %zu spos: %zu pos %zu rstart %du\n", array.size(), spos, pos, rstart);)
-        assert(false);
-        // TODO remove loops == 0 case
-      } else {
-        assert(pos > spos);
-        assert(pos >= unroll);
+      // TODO: do we need limit of >= 1 loops for branchy?
+      size_t loops = std::max(1ul, div_up(pos - spos, unroll));  // round up
+
+      // I heard you like asserts
+      assert(spos < pos || (spos == pos && pos == array.size()));
+      if (spos < array.size()) {
+        assert(spos % unroll == 0);
         assert(array.at(spos) >= rstart);
-        assert(pos == array.size() || array.at(pos) >= rend);
-        // unless we hit the single (forced) chunk case, the last block should be in the range of this chunk
-        assert(array.at(pos - unroll) < rend || pos - unroll == spos);
-        auto sptr = array.data() + spos;
-        assert(spos + loops * unroll <= array.size());
-        DBG(printf("sptr: %p send: %p\n", sptr, sptr + unroll * loops);)
-        assert(loops < std::numeric_limits<uint32_t>::max());
-        uint32_t last = array.at(pos - 1); // check the last element in the last block for this chunk, this defines the overshoot
-        assert(last > rstart);
-        uint32_t overshoot = last < rend ? 0 : last - rend + 1;
-        assert(overshoot < cache_size); // this could happen for real data, need to fixed "extended overshoot" to solve it
-        chunks.push_back({sptr, (uint32_t)loops, overshoot});
-        DBG(printf("AUX - a[%zu]: %u to a[%zu] : %u iters: %zu oshoot: %5du rstart %du\n",
-            spos, array[spos], pos - 1, array[pos - 1], loops, overshoot, rstart);)
+        if (pos < array.size()) {
+          assert(pos % unroll == 0);
+          assert(array.at(pos) >= rend);
+          assert(spos + loops * unroll == pos);
+          assert((pos - spos) % unroll == 0);
+        }
       }
+      // unless we hit the single (forced) chunk case, the last block should be in the range of this chunk
+      assert(array.at(pos - unroll) < rend || pos - unroll == spos);
 
-      if (pos == array.size()) {
-        break;
+      assert(loops < std::numeric_limits<uint32_t>::max());
+
+      uint32_t last = array.at(pos - 1); // check the last element in the last block for this chunk, this defines the overshoot
+      assert(last > rstart || spos == pos);
+      uint32_t overshoot = last < rend ? 0 : last - rend + 1;
+      assert(overshoot < cache_size); // this could happen for real data, need to fix "extended overshoot" to solve it
+
+      size_t rw_index = rewritten.size();
+      //rewritten.insert(rewritten.end(), array.begin() + spos, array.begin() + pos);
+      for (size_t i = spos; i < pos; i++) {
+        uint32_t val = array.at(i) + COUNTER_OFFSET;
+        assert(val >= rstart);
+        assert(val - rstart < 2 * cache_size);
+        rewritten.push_back(val);
       }
+      ssize_t filler_count = loops * unroll - (pos - spos); // amount extra we have to write
+      filler_total += filler_count;
+      assert(filler_count >= 0);
+      assert((filler_count == 0) || pos == array.size());
+
+      // fill out the block with zeros for any filler elements - because of COUNTER_OFFSET
+      // zeros write to an ignored part of the array and hence serve as no ops
+      rewritten.insert(rewritten.end(), filler_count, rstart);
+      // the amount written must be equal to the amount the counter code
+      // will read
+      size_t written_count = rewritten.size() - rw_index;
+      assert(loops * unroll == written_count);
+      meta.push_back({rw_index, (uint32_t)loops, overshoot});
+      DBG(printf("AUX - chunk: %zu a[%zu]: %u to a[%zu] : %u iters: %zu "
+          "wreal: %zu wfill: %zu oshoot: %5du rstart %du\n",
+          c, spos, array[spos], pos - 1, array[pos - 1], loops,
+          written_count - filler_count, filler_count, overshoot, rstart);)
     }
+
+    assert(chunk_count == c);
+    assert(meta.size() == chunk_count);
+
+    data.reset(new uint32_t[rewritten.size()]);
+    std::copy(rewritten.begin(), rewritten.end(), data.get());
+
+    chunks.reserve(chunk_count);
+
+    for (auto& m : meta) {
+      auto sptr = data.get() + m.rw_index;
+      // DBG(printf("sptr: %p send: %p\n", sptr, sptr + unroll * m.iter_count);)
+      chunks.push_back({sptr, m.iter_count, m.overshoot});
+    }
+
+    DBG(printf("Filler %%%7.4f\n", 100.0 * filler_total / rewritten.size()));
+  }
+
+  /**
+   * Returns a "view" of this aux object. A view points to the
+   * same data and chunk vector, but is non-owning. A view is valid
+   * only as long as the object it was created from is valid (and
+   * the corresponding fields are not modified).
+   */
+  aux_view get_view() const {
+    return { data.get(), minispan<const aux_chunk>::from(chunks) };
   }
 };
 
-using all_aux = std::vector<avx2b_aux>;
+struct all_aux {
+  uint32_t largest; // the largest value found in any array
+  std::vector<avx2b_aux> aux_data;
+
+  all_aux(uint32_t largest) : largest{largest} {}
+};
 
 /**
  * Auxillary data specific to a query, calculated dynamically based
@@ -214,28 +320,37 @@ using all_aux = std::vector<avx2b_aux>;
 struct dynamic_aux {
   uint32_t largest;
 
-  // std::vector<std::vector<size_t>> iter_counts;
-  // std::vector<std::vector<const uint32_t *>> start_ptr;
   std::vector<std::vector<aux_chunk>> aux;
   std::vector<uint32_t> max_overshoot;
 
   HEDLEY_NEVER_INLINE
-  dynamic_aux(const all_aux& aux_array) {
+  dynamic_aux(const implb::all_aux& all_aux_info, const std::vector<uint32_t>& data_indexes) {
+
+      /* extract the relevant aux_info arrays based on the given data_indexes */
+    std::vector<aux_view> views;
     uint32_t largest = 0;
-    for (auto& aux : aux_array) {
-      largest = std::max(largest, aux.largest);
+    views.reserve(data_indexes.size());
+    for (auto i : data_indexes) {
+      assert(i < all_aux_info.aux_data.size());
+      auto& aux_data = all_aux_info.aux_data[i];
+      views.push_back(aux_data.get_view());
+      largest = largest >= aux_data.largest ? largest : aux_data.largest;
     }
     this->largest = largest;
 
-    size_t dsize = aux_array.size();
-    size_t chunks = (largest + cache_size - 1) / cache_size;
-    DBG(printf("chunks: %zu\n", chunks);)
+    size_t dsize = views.size();
+    size_t chunks_needed = div_up(largest + 1, (uint32_t)cache_size);
+    DBG(printf("chunks_needed: %zu\n", chunks_needed);)
 
     size_t pfdistance = std::min((size_t)30, dsize);
 
-    for (size_t chunk = 0; chunk < chunks; chunk++) {
+    for (auto& v : views) {
+      assert(chunks_needed <= v.chunks.size());
+    }
+
+    for (size_t chunk = 0; chunk < chunks_needed; chunk++) {
       for (size_t i = 0; i < pfdistance; i++) {
-        _mm_prefetch(&aux_array[i].chunks[chunk], _MM_HINT_T0);
+        _mm_prefetch(&views[i].chunks[chunk], _MM_HINT_T0);
       }
 
       aux.emplace_back(dsize + 1);
@@ -245,16 +360,16 @@ struct dynamic_aux {
       uint32_t maxo = 0;
 
       for (size_t i = 0; i < dsize - pfdistance; ++i) {
-        assert(chunk < aux_array[i].chunks.size());
-        auto info = aux_array[i].chunks[chunk];
-        _mm_prefetch(&aux_array[i + pfdistance].chunks[chunk], _MM_HINT_T0);
+        assert(chunk < views[i].chunks.size());
+        auto info = views[i].chunks[chunk];
+        _mm_prefetch(&views[i + pfdistance].chunks[chunk], _MM_HINT_T0);
         thisaux[i] = info;
         maxo = maxo > info.overshoot ? maxo : info.overshoot;
       }
 
       for (size_t i = dsize - pfdistance; i < dsize; ++i) {
-        assert(chunk < aux_array[i].chunks.size());
-        auto info = aux_array[i].chunks[chunk];
+        assert(chunk < views[i].chunks.size());
+        auto info = views[i].chunks[chunk];
         thisaux[i] = info;
         maxo = maxo > info.overshoot ? maxo : info.overshoot;
       }
@@ -268,13 +383,15 @@ struct dynamic_aux {
 
 HEDLEY_NEVER_INLINE
 all_aux get_all_aux(const all_data& data) {
-  all_aux ret;
-  ret.reserve(data.size());
+  all_aux ret{ get_largest(data) };
+  auto& aux_array = ret.aux_data;
+  aux_array.reserve(data.size());
   for (auto &d : data) {
-    ret.emplace_back(d);
+    aux_array.emplace_back(d, ret.largest);
   }
-  for (auto& aux : ret) {
-    assert(aux.chunks.size() == ret.front().chunks.size());
+  for (auto& aux : aux_array) {
+    // DBG(printf("chunks.size(): %zu\n", aux.chunks.size()));
+    assert(aux.chunks.size() == aux_array.front().chunks.size());
   }
   return ret;
 }
@@ -290,8 +407,8 @@ all_aux get_all_aux_reordered(const all_data& data) {
 
   std::vector<uint32_t> contiguous;
   contiguous.reserve(data.size() * data.front().size());
-  for (uint32_t rstart = 0, chunk = 0; rstart < MAX_ELEM; rstart += cache_size, chunk++) {
-    for (auto& aux : all) {
+  for (uint32_t rstart = 0, chunk = 0; rstart <= all.largest; rstart += cache_size, chunk++) {
+    for (auto& aux : all.aux_data) {
       auto& chunkaux = aux.chunks.at(chunk);
       contiguous.insert(contiguous.end(), chunkaux.start_ptr, chunkaux.start_ptr + chunkaux.iter_count * unroll);
     }
@@ -302,8 +419,8 @@ all_aux get_all_aux_reordered(const all_data& data) {
   std::copy(contiguous.begin(), contiguous.end(), contigarray);
 
   uint32_t* cur = contigarray;
-  for (uint32_t rstart = 0, chunk = 0; rstart < MAX_ELEM; rstart += cache_size, chunk++) {
-    for (auto& aux : all) {
+  for (uint32_t rstart = 0, chunk = 0; rstart <= all.largest; rstart += cache_size, chunk++) {
+    for (auto& aux : all.aux_data) {
       auto& chunkaux = aux.chunks.at(chunk);
       chunkaux.start_ptr = cur;
       cur += chunkaux.iter_count * unroll;
@@ -318,12 +435,12 @@ all_aux get_all_aux_reordered(const all_data& data) {
 
 } // implb namespace
 
-alignas(64) uint8_t counters[cache_size * 2];
+#define counter_base (counters + COUNTER_OFFSET)
+alignas(64) uint8_t counters[COUNTER_OFFSET + cache_size * 2];
 
 using kernel_fn = void (const implb::aux_chunk* aux_ptr,
                         const implb::aux_chunk* aux_end,
-                        uint32_t range_start,
-                        const implb::data_ptrs &data);
+                        uint32_t range_start);
 
 extern "C" kernel_fn record_hits_asm_branchy;
 extern "C" kernel_fn record_hits_asm_branchless;
@@ -332,8 +449,10 @@ kernel_fn record_hits_c;
 HEDLEY_NEVER_INLINE
 void record_hits_c(const implb::aux_chunk* aux_ptr,
                    const implb::aux_chunk* aux_end,
-                   uint32_t range_start,
-                   const implb::data_ptrs &data) {
+                   uint32_t range_start) {
+#ifndef NDEBUG
+  const implb::aux_chunk* aux_start = aux_ptr;
+#endif
   const uint32_t* eptr = aux_ptr->start_ptr;
   assert(eptr);
   size_t iters_left = aux_ptr->iter_count;
@@ -342,19 +461,10 @@ void record_hits_c(const implb::aux_chunk* aux_ptr,
   do {
     for (int i = 0; i < unroll; i++) {
       uint32_t e = *eptr++;
-#ifdef DEBUGB
-      if (e < start) {
-        auto didx = dsize - (start_ptrs_end - start_ptrs);
-        printf("start: %du e: %du iters_left: %zu\n", start, e, iters_left);
-        const uint32_t *sptr_begin = data[didx]->data();
-        const uint32_t *sptr_end = sptr_begin + data[didx]->size();
-        printf("sptr_begin %p\n", sptr_begin);
-        printf("sptr_end   %p\n", sptr_end);
-        printf("eptr       %p\n", eptr - 1);
-      }
-#endif
+      size_t write_idx = e - range_start;
       assert(e >= range_start);
-      assert(e - range_start < cache_size * 2);
+      assert(write_idx >= COUNTER_OFFSET || write_idx == 0);
+      assert(write_idx < sizeof(counters));
       counters[e - range_start]++;
     }
 
@@ -369,18 +479,12 @@ void record_hits_c(const implb::aux_chunk* aux_ptr,
       iters_left = aux_ptr->iter_count;
 
 #ifndef NDEBUG
-      if (aux_ptr == aux_end) {
-        auto dsize = data.size();
-        auto didx = dsize - (aux_end - aux_ptr);
+      if (aux_ptr != aux_end) {
+        auto dsize = aux_end - aux_start;
+        auto didx = aux_ptr - aux_start;
         assert(didx < dsize);
-        const uint32_t *sptr_begin = data[didx]->data();
-        const uint32_t *sptr_end = sptr_begin + data[didx]->size();
-        DBG(printf("switching to index %zu (%zu elements left)\n", didx, sptr_end - eptr);)
-        assert(eptr >= sptr_begin);
-        assert(eptr < sptr_end);
-        assert(iters_left > 0);
-        DBG(printf("iters_left: %zu\n", iters_left);)
-        DBG(fflush(stdout);)
+        DBG(printf("switching to index %zu (%u loops, %u overshoot)\n",
+            didx, iters_left, aux_ptr->overshoot);)
       }
 #endif
 
@@ -442,42 +546,44 @@ void copymem(T* HEDLEY_RESTRICT dest, const T* src, size_t count) {
 
 /**
  * Parameterized on K, the kernel function which does the core counter increment loop.
+ *
+ * @param data_indexes the list of indexes of posting arrays for this query
  */
 template <kernel_fn K>
-void fastscancount_avx2b(const implb::data_ptrs &data, std::vector<uint32_t> &out,
-                         uint8_t threshold, const implb::all_aux& aux_info) {
+void fastscancount_avx2b(const implb::data_ptrs &, std::vector<uint32_t> &out,
+                         uint8_t threshold, const implb::all_aux& all_aux_info,
+                         const std::vector<uint32_t>& data_indexes) {
 
   using namespace implb;
 
   out.clear();
-  const size_t dsize = data.size();
+  const size_t dsize = data_indexes.size();
 
-  dynamic_aux dyn_aux(aux_info);
+  dynamic_aux dyn_aux(all_aux_info, data_indexes);
 
-  auto cdata = counters;
   size_t chunk = 0;
   //memset(cdata, 0, 2 * cache_size * sizeof(counters[0]));
-  memzero(cdata, 2 * cache_size * sizeof(counters[0]));
-  for (uint32_t range_start = 0, chunk = 0; range_start < dyn_aux.largest; range_start += cache_size, chunk++) {
+  memzero(counters, sizeof(counters));
+  for (uint32_t range_start = 0, chunk = 0; range_start <= dyn_aux.largest; range_start += cache_size, chunk++) {
     uint32_t range_end = range_start + cache_size;
 
     assert(dyn_aux.aux.at(chunk).size() == dsize + 1);
-    const aux_chunk* aux_ptr = dyn_aux.aux.at(chunk).data(), * aux_end = aux_ptr + dsize;
+    const aux_chunk* aux_ptr = dyn_aux.aux.at(chunk).data(), *aux_end = aux_ptr + dsize;
 
-    DBG(printf("chunk %du range_start: %du end: %du iters_left %zu first %du\n",
-        chunk, range_start, range_end, iters_left, *eptr);)
+    DBG(printf("chunk %du range_start: %du end: %du iters_left %u first %u\n",
+        chunk, range_start, range_end, aux_ptr->iter_count, *aux_ptr->start_ptr);)
 
-    K(aux_ptr, aux_end, range_start, data);
+    K(aux_ptr, aux_end, range_start);
 
-    populate_hits_avx(counters, cache_size, threshold, range_start, out);
+    populate_hits_avx(counter_base, cache_size, threshold, range_start, out);
 
     uint32_t overshoot = dyn_aux.max_overshoot[chunk];
     //printf("overshoot: %u\n", overshoot);
     assert(overshoot < cache_size);
     // memcpy(counters, counters + cache_size, overshoot);
-    copymem(counters, counters + cache_size, overshoot);
+    copymem(counter_base, counter_base + cache_size, overshoot);
     // memset(counters + overshoot, 0, cache_size);
-    memzero<cache_size>(counters + overshoot);
+    memzero<cache_size>(counter_base + overshoot);
   }
 }
 

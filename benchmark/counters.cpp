@@ -17,6 +17,7 @@
 #include <iostream>
 #include <iomanip>
 #include <vector>
+#include <numeric>
 #include <stdexcept>
 
 //////////////////////
@@ -143,12 +144,10 @@ const uint32_t range_size_avx512 = 40000;
 void calc_alldata_boundaries(const std::vector<std::vector<uint32_t>>& data,
                              std::vector<std::vector<uint32_t>>& range_ends,
                              size_t range_size) {
-  uint32_t largest = 0;
+  uint32_t largest = get_largest(data);
   range_ends.clear();
   range_ends.resize(data.size());
-  for(const auto& v : data) {
-    if (!v.empty() && v[v.size() - 1] > largest) largest = v[v.size() - 1];
-  }
+
   for (unsigned i = 0; i < data.size(); ++i) {
     calc_boundaries(largest, range_size, data[i], range_ends[i]);
   }
@@ -265,8 +264,8 @@ void print_headers() {
   } \
 
 void demo_data(const std::vector<std::vector<uint32_t>>& data,
-              const std::vector<std::vector<uint32_t>>& queries,
-              size_t threshold) {
+               const std::vector<std::vector<uint32_t>>& queries,
+               size_t threshold) {
   size_t N = 0;
   for (const auto& data_elem : data) {
     size_t sz = data_elem.size();
@@ -350,11 +349,11 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
 #ifdef __AVX2__
     BENCHTEST(fastscancount_avx2, "AVX2-based scancount", elapsed_avx);
 
-    BENCHTEST(fastscancount_avx2b<fastscancount::record_hits_c>, "Try2 AVX2 in C", dummy, avx2b_aux);
+    BENCHTEST(fastscancount_avx2b<fastscancount::record_hits_c>, "Try2 AVX2 in C", dummy, avx2b_aux, query_elem);
 
-    BENCHTEST(fastscancount_avx2b<fastscancount::record_hits_asm_branchy>, "AVX2 in ASM branchy", dummy, avx2b_aux);
+    BENCHTEST(fastscancount_avx2b<fastscancount::record_hits_asm_branchy>, "AVX2 in ASM branchy", dummy, avx2b_aux, query_elem);
 
-    BENCHTEST(fastscancount_avx2b<fastscancount::record_hits_asm_branchless>, "AVX2 in ASM branchless", dummy, avx2b_aux);
+    BENCHTEST(fastscancount_avx2b<fastscancount::record_hits_asm_branchless>, "AVX2 in ASM branchless", dummy, avx2b_aux, query_elem);
 #endif
 #ifdef __AVX512F__
     bench(
@@ -390,15 +389,25 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
   size_t sum = 0;
   for (size_t c = 0; c < array_count; c++) {
     std::vector<uint32_t> &v = data[c];
+    // uncomment this (and comment out the following loop)
+    // for more random lenths and values
+    // size_t len = rand() % length;
+    // // size_t len = length;
+    // size_t n = rand() % N;
+    // for (size_t i = 0; i < len; i++) {
+    //   v.push_back(rand() % n);
+    // }
+
     for (size_t i = 0; i < length; i++) {
       v.push_back(rand() % N);
     }
+
     std::sort(v.begin(), v.end());
     v.resize(std::distance(v.begin(), unique(v.begin(), v.end())));
-    // make each vector a multiple of unroll, simplying other logic
-    while (v.size() % fastscancount::unroll != 0) {
-      v.pop_back();
-    }
+    // // make each vector a multiple of unroll, simplying other logic
+    // while (v.size() % fastscancount::unroll != 0) {
+    //   v.pop_back();
+    // }
     v.shrink_to_fit();
     sum += v.size();
     data_ptrs.push_back(&data[c]);
@@ -416,6 +425,9 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
 
   // aux data for avx2b
   auto avx2b_aux = fastscancount::implb::get_all_aux(data);
+  // query definition composed of all the arrays
+  std::vector<uint32_t> query_elem(data.size());
+  std::iota(query_elem.begin(), query_elem.end(), 0);
 
   float elapsed = 0, elapsed_fast = 0, elapsed_avx = 0, elapsed_avx512 = 0, dummy = 0;
   fastscancount::scancount(data_ptrs, answer, threshold);
@@ -432,11 +444,11 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
 #ifdef __AVX2__
   // BENCH_LOOP(fastscancount_avx2,  "AVX2-based scancount", elapsed_avx);
 
-  // BENCH_LOOP(fastscancount_avx2b<fastscancount::record_hits_c>, "Try2 AVX2 in C", dummy, avx2b_aux);
+  BENCH_LOOP(fastscancount_avx2b<fastscancount::record_hits_c>, "Try2 AVX2 in C", dummy, avx2b_aux, query_elem);
 
-  BENCH_LOOP(fastscancount_avx2b<fastscancount::record_hits_asm_branchy>, "AVX2 in ASM branchy", dummy, avx2b_aux);
+  BENCH_LOOP(fastscancount_avx2b<fastscancount::record_hits_asm_branchy>, "AVX2 in ASM branchy", dummy, avx2b_aux, query_elem);
 
-  BENCH_LOOP(fastscancount_avx2b<fastscancount::record_hits_asm_branchless>, "AVX2 in ASM branchless", dummy, avx2b_aux);
+  BENCH_LOOP(fastscancount_avx2b<fastscancount::record_hits_asm_branchless>, "AVX2 in ASM branchless", dummy, avx2b_aux, query_elem);
 #endif
 
   for (size_t t = 0; t < REPEATS; t++) {
@@ -513,6 +525,7 @@ int main(int argc, char *argv[]) {
         data.push_back(tmp);
       }
     }
+
     std::vector<std::vector<uint32_t>> queries;
     {
       MaropuGapReader qrdr(queries_file);
@@ -526,6 +539,7 @@ int main(int argc, char *argv[]) {
     }
 
     std::cout << "Read " << data.size() << " posting arrays and " << queries.size() << " queries\n";
+    std::cout << "Largest max : " << get_largest(data) << "\nSmallest max: " << get_smallest_max(data) << "\n";
 
     try {
       demo_data(data, queries, threshold);
