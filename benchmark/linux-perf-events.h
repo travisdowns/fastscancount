@@ -10,16 +10,15 @@
 #include <stdexcept>
 
 
-template <int TYPE = PERF_TYPE_HARDWARE>
 class LinuxEvents {
 
     int fd;
     perf_event_attr attribs;
 
 public:
-    LinuxEvents(int config) : fd(0) {
+    LinuxEvents(uint64_t type, uint64_t config) : fd(0) {
         memset(&attribs, 0, sizeof(attribs));
-        attribs.type        = TYPE;
+        attribs.type        = type;
         attribs.size        = sizeof(attribs);
         attribs.config      = config;
         attribs.disabled        = 1;

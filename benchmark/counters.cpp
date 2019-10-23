@@ -57,44 +57,46 @@ constexpr int EVENT_PEND_MISS_CYCLES  = 0x1000148;
 #define USE_COUNTERS
 #endif
 
-std::vector<int> evts = {
-#ifdef USE_COUNTERS
-                          PERF_COUNT_HW_CPU_CYCLES,
-                          PERF_COUNT_HW_INSTRUCTIONS,
-                          PERF_COUNT_HW_BRANCH_MISSES,
-#endif
-};
-
-LinuxEventsWrapper unified(evts);
-
 /* a function that returns the normalized event value given the value, cycles and sum */
-using raw_extractor = double (double val, double cycles, size_t sum);
+using raw_extractor = double (double val, double cycles, size_t total_elems);
 
-struct raw_event {
-  int event_code;
+#define HW_EVENT(suffix) {PERF_TYPE_HARDWARE, PERF_COUNT_HW_ ## suffix }
+
+struct column_spec {
+  TypeAndConfig event;
   const char* desc;
   raw_extractor* extractor;
+
+  double get_result(LinuxEventsWrapper& w, size_t total_elems) {
+    double cycles = w.get_result(HW_EVENT(CPU_CYCLES));
+    return extractor(w.get_result(event), cycles, total_elems);
+  }
 };
 
-raw_event raw_events[] = {
+column_spec all_columns[] = {
 #ifdef USE_COUNTERS
-  { EVENT_L1D_REPL,     "l1 repl/element",   [](double val, double cycles, size_t sum) -> double { return val / sum;    } },
-  // { EVENT_UOPS_ISSUED,     "uops/cycle",     [](double val, double cycles, size_t sum) -> double { return val / cycles; } },
-  { EVENT_UOPS_ISSUED,     "uops/elem",      [](double val, double cycles, size_t sum) -> double { return val / sum; } },
-  { EVENT_PEND_MISS,       "pmiss/elem",     [](double val, double cycles, size_t sum) -> double { return val / sum; } },
-  { EVENT_PEND_MISS_CYCLES,"pmiss_cyc/elem", [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  // you must always leave CPU_CYCLES enabled
+  { HW_EVENT(CPU_CYCLES   ),                  "cycles/element", [](double val, double cycles, size_t sum) -> double { return val / sum;          } },
+  { HW_EVENT(INSTRUCTIONS ),                  "instr/cycle",    [](double val, double cycles, size_t sum) -> double { return val / cycles; } },
+  { HW_EVENT(BRANCH_MISSES),                  "miss/element",   [](double val, double cycles, size_t sum) -> double { return val / sum;          } },
+  { {PERF_TYPE_RAW, EVENT_L1D_REPL,        }, "l1 repl/element",[](double val, double cycles, size_t sum) -> double { return val / sum;    } },
+  { {PERF_TYPE_RAW, EVENT_UOPS_ISSUED,     }, "uops/cycle",     [](double val, double cycles, size_t sum) -> double { return val / cycles; } },
+  { {PERF_TYPE_RAW, EVENT_UOPS_ISSUED,     }, "uops/elem",      [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  { {PERF_TYPE_RAW, EVENT_PEND_MISS,       }, "pmiss/elem",     [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  { {PERF_TYPE_RAW, EVENT_PEND_MISS_CYCLES,}, "pmiss_cyc/elem", [](double val, double cycles, size_t sum) -> double { return val / sum; } },
 #endif
 };
 
-std::vector<int> get_raw_wrapper() {
-  std::vector<int> ret;
-  for (auto& raw_evt : raw_events) {
-    ret.push_back(raw_evt.event_code);
+template <size_t N>
+std::vector<TypeAndConfig> get_wrapper(column_spec (&cols)[N]) {
+  std::vector<TypeAndConfig> ret;
+  for (auto& e : cols) {
+    ret.push_back(e.event);
   }
   return ret;
 }
 
-LinuxEventsWrapperT<PERF_TYPE_RAW> raw = get_raw_wrapper();
+LinuxEventsWrapper unified = get_wrapper(all_columns);
 
 namespace fastscancount {
 void scancount(const std::vector<const std::vector<uint32_t>*> &data,
@@ -195,9 +197,7 @@ void bench(F f, const std::string &name,
            bool print) {
   WallClockTimer tm;
   unified.start();
-  raw.start();
   f();
-  raw.end();
   unified.end();
   elapsed += tm.split();
   if (answer.size() != expected)
@@ -205,19 +205,11 @@ void bench(F f, const std::string &name,
               << "\n";
 #ifdef USE_COUNTERS
   if (print) {
-    double cycles = unified.get_result(PERF_COUNT_HW_CPU_CYCLES);
-    double instructions = unified.get_result(PERF_COUNT_HW_INSTRUCTIONS);
-    double misses = unified.get_result(PERF_COUNT_HW_BRANCH_MISSES);
-    double l1rep = raw.get_result(EVENT_L1D_REPL);
-    double uops = raw.get_result(EVENT_UOPS_ISSUED);
-    std::cout << std::setw(NAME_WIDTH) << name;
     std::ios_base::fmtflags f(std::cout.flags());
+    std::cout << std::setw(NAME_WIDTH) << name;
     std::cout << std::fixed << std::setprecision(4);
-    std::cout << std::setw(COL_WIDTH) << cycles / sum;
-    std::cout << std::setw(COL_WIDTH) << instructions / cycles;
-    std::cout << std::setw(COL_WIDTH) << misses / sum;
-    for (auto& raw_evt : raw_events) {
-      std::cout << std::setw(COL_WIDTH) << raw_evt.extractor(raw.get_result(raw_evt.event_code), cycles, sum);
+    for (auto& col : all_columns) {
+      std::cout << std::setw(COL_WIDTH) << col.get_result(unified, sum);
     }
     std::cout.flags(f);
     std::cout << '\n';
@@ -227,11 +219,8 @@ void bench(F f, const std::string &name,
 
 void print_headers() {
   std::cout << std::setw(NAME_WIDTH) << "algorithm";
-  std::cout << std::setw(COL_WIDTH)  << "cycles/element";
-  std::cout << std::setw(COL_WIDTH)  << "instr/cycle";
-  std::cout << std::setw(COL_WIDTH)  << "miss/element";
-  for (auto &raw_evt : raw_events) {
-    std::cout << std::setw(COL_WIDTH)  << raw_evt.desc;
+  for (auto &col : all_columns) {
+    std::cout << std::setw(COL_WIDTH)  << col.desc;
   }
   std::cout << '\n';
 }

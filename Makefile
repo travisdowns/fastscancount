@@ -15,7 +15,7 @@ LOCAL_MK = $(wildcard local.mk)
 counter: counters.o asm-kernels.o
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $^
 
-counters.o: benchmark/counters.cpp include/*.h Makefile $(LOCAL_MK)
+counters.o: benchmark/counters.cpp benchmark/*.h include/*.h Makefile $(LOCAL_MK)
 	$(CXX) $(CXXFLAGS) $(CXXEXTRA) -c benchmark/counters.cpp -Ibenchmark -Iinclude
 
 asm-kernels.o: asm-kernels.asm $(LOCAL_MK)

@@ -133,19 +133,25 @@ using data_ptrs = std::vector<const data_array *>;
 /**
  * Each chunk of data in an input array has an associated aux_chunk
  * object.
+ *
+ * The object is parameterized on T, the type of elements pointed to
+ * by the rewritten data.
  */
-struct aux_chunk {
-  aux_chunk() {} // leave everything uninitialized to avoid zeroing everything during vector creation
-  aux_chunk(const uint32_t* start_ptr, uint32_t iter_count, uint32_t overshoot)
+template <typename T>
+struct aux_chunk_t {
+  aux_chunk_t() {} // leave everything uninitialized to avoid zeroing everything during vector creation
+  aux_chunk_t(const T* start_ptr, uint32_t iter_count, uint32_t overshoot)
       : start_ptr{start_ptr}, iter_count{iter_count}, overshoot{overshoot} {}
 
   /* start of data array */
-  const uint32_t* start_ptr;
+  const T* start_ptr;
   /* how many iterations are needed for this array at the current unroll factor */
   uint32_t iter_count;
   /* the overshoot for this chunk based on current unroll */
   uint32_t overshoot;
 };
+
+using aux_chunk = aux_chunk_t<uint32_t>;
 
 template <typename T>
 struct minispan {

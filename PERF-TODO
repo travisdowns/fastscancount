@@ -2,3 +2,10 @@ Things that could still go faster:
 
  - Better/proper transpose using SIMD for dynamic_aux
  - Separate out the overshoot calculation from the start/iters transpose, and do it separately with SIMD
+
+Notes on speedup progress:
+
+From a baseline of 3.5 elems per cycle (AVX2 original algo)
+
+Speedup   Speed (e/c)
+1.4x             ~2.5   Unrolling and prefetching in the counting loop (most attributable to prefetching)
