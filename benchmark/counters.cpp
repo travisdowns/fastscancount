@@ -436,7 +436,7 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
   std::iota(query_elem.begin(), query_elem.end(), 0);
 
   float elapsed = 0, elapsed_fast = 0, elapsed_avx = 0,
-      elapsed_avx2bb = 0, elapsed_avx512 = 0, dummy = 0;
+      elapsed_avx2bb = 0, elapsed_avx2b16 = 0, elapsed_avx512 = 0, dummy = 0;
   fastscancount::scancount(data_ptrs, answer, threshold);
   const size_t expected = answer.size();
   std::cout << "Got " << expected << " hits\n";
@@ -444,12 +444,12 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
 
   print_headers();
 
-  // BENCH_LOOP(scancount, "baseline scancount", elapsed);
+  BENCH_LOOP(scancount, "baseline scancount", elapsed);
 
-  // BENCH_LOOP(fastscancount, "fastscancount", elapsed_fast);
+  BENCH_LOOP(fastscancount::fastscancount, "fastscancount", elapsed_fast);
 
 #ifdef __AVX2__
-  // BENCH_LOOP(fastscancount_avx2,  "AVX2-based scancount", elapsed_avx);
+  BENCH_LOOP(fastscancount_avx2,  "AVX2-based scancount", elapsed_avx);
 
   // BENCH_LOOP((fastscancount_avx2b<uint32_t, fastscancount::record_hits_c>), "AVX2B in C 32b", dummy, avx2b_aux32, query_elem);
   // BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_c>), "AVX2B in C 16b", dummy, avx2b_aux16, query_elem);
@@ -487,6 +487,7 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
 #ifdef __AVX2__
   std::cout << "fastscancount_avx2: " << (sum_total/(elapsed_avx/1e3)) << std::endl;
   std::cout << "fastscan_avx2bb:    " << (sum_total/(elapsed_avx2bb/1e3)) << std::endl;
+  std::cout << "fastscan_avx2b16:   " << (sum_total/(elapsed_avx2b16/1e3)) << std::endl;
 #endif
 #ifdef __AVX512F__
   std::cout << "fastscancount_avx512: " << (sum_total/(elapsed_avx512/1e3)) << std::endl;
