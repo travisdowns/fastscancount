@@ -29,4 +29,31 @@ uint32_t get_smallest_max(const std::vector<std::vector<uint32_t>>& data) {
   return smallest;
 }
 
+template <typename T>
+struct minispan {
+  T* begin;
+  size_t size_;
+
+  const T& operator[](size_t i) const {
+    assert(i < size());
+    return begin[i];
+  }
+
+  size_t size() const { return size_; }
+
+  template <typename C>
+  static minispan<T> from(C& c) {
+    return { c.data(), c.size() };
+  }
+};
+
+/**
+ * Return the alignmetn of the given pointer, i.e,. the largest power
+ * of which the address is a multiple.
+ */
+inline size_t get_alignment(const void *p) {
+  return (size_t)((1UL << __builtin_ctzl((uintptr_t)p)));
+}
+
+
 #endif // #ifndef COMMON_H_

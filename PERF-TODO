@@ -2,6 +2,8 @@ Things that could still go faster:
 
  - Better/proper transpose using SIMD for dynamic_aux
  - Separate out the overshoot calculation from the start/iters transpose, and do it separately with SIMD
+ - Check the alignment of all relevant data: posting values, aux data, etc
+ - hugepages for data
 
 Notes on speedup progress:
 
@@ -13,3 +15,4 @@ Speedup   Speed (e/c)
 1.0x             ~2.5   Removing the sub from the core loop by doing it at static rewrite time. Amazingly
                         while this saved one full instruction per element (from 4.7 to 3.7), performance
                         didn't budge by more than 2%.
+1.1x             ~2.2   Dropping to 16b posting indexes

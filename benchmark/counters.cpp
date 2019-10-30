@@ -25,8 +25,8 @@
 //////////////////////
 
 /* the number of times to run each benchmark in demo mode */
-#define REPEATS 10
-#define START_THRESHOLD  1
+#define REPEATS 1000
+#define START_THRESHOLD 10
 #define END_THRESHOLD   11
 
 //////////////////////
@@ -73,7 +73,7 @@ struct column_spec {
   }
 };
 
-column_spec all_columns[] = {
+std::vector<column_spec> all_columns = {
 #ifdef USE_COUNTERS
   // you must always leave CPU_CYCLES enabled
   { HW_EVENT(CPU_CYCLES   ),                  "cycles/element", [](double val, double cycles, size_t sum) -> double { return val / sum;          } },
@@ -88,8 +88,7 @@ column_spec all_columns[] = {
 #endif
 };
 
-template <size_t N>
-std::vector<TypeAndConfig> get_wrapper(column_spec (&cols)[N]) {
+std::vector<TypeAndConfig> get_wrapper(const std::vector<column_spec>& cols) {
   std::vector<TypeAndConfig> ret;
   for (auto& e : cols) {
     ret.push_back(e.event);
@@ -159,7 +158,7 @@ void calc_alldata_boundaries(const std::vector<std::vector<uint32_t>>& data,
 template <typename F>
 void test(F f, const std::vector<const std::vector<uint32_t>*>& data_ptrs,
           std::vector<uint32_t>& answer, unsigned threshold, const std::string &name) {
-  fastscancount::fastscancount(data_ptrs, answer, threshold);
+  fastscancount::scancount(data_ptrs, answer, threshold);
   size_t s1 = answer.size();
   auto a1 (answer);
   std::sort(a1.begin(), a1.end());
@@ -180,14 +179,15 @@ void test(F f, const std::vector<const std::vector<uint32_t>*>& data_ptrs,
         std::cout << i << " " << extra[i] << '\n';
       }
       throw std::runtime_error(std::string("bug (") + (refextra ? "ref" : "answer") + " had extra elems): " + name);
-    }
-    for(size_t j = 0; j < minsize; j++) {
-      std::cout << j << " " << a1[j] << " vs " << a2[j] ;
+    } else {
+      for(size_t j = 0; j < minsize; j++) {
+        std::cout << j << " " << a1[j] << " vs " << a2[j] ;
 
-      if(a1[j] != a2[j]) std::cout << " oh oh ";
-      std::cout << std::endl;
+        if(a1[j] != a2[j]) std::cout << " oh oh ";
+        std::cout << std::endl;
+      }
+      throw std::runtime_error("bug: " + name);
     }
-    throw std::runtime_error("bug: " + name);
   }
 }
 
@@ -230,17 +230,17 @@ void print_headers() {
 #define TEST(fn, ...) \
     test(       \
       [&](){    \
-        fastscancount::fn(data_ptrs, answer, threshold, ## __VA_ARGS__);     \
+        fn(data_ptrs, answer, threshold, ## __VA_ARGS__);     \
       }, data_ptrs, answer, threshold, #fn  \
     );
 #else
-#define TEST(fn)
+#define TEST(fn, ...)
 #endif
 
 #define BENCH(fn, name, elapsed, ...) \
   bench(                \
     [&]() {             \
-      fastscancount::fn(data_ptrs, answer, threshold, ## __VA_ARGS__ ); \
+      fn(data_ptrs, answer, threshold, ## __VA_ARGS__ ); \
     },                  \
     name, elapsed, answer, sum, expected, print);
 
@@ -256,6 +256,9 @@ void print_headers() {
 void demo_data(const std::vector<std::vector<uint32_t>>& data,
                const std::vector<std::vector<uint32_t>>& queries,
                size_t threshold) {
+
+  using namespace fastscancount;
+
   size_t N = 0;
   for (const auto& data_elem : data) {
     size_t sz = data_elem.size();
@@ -270,13 +273,14 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
   std::vector<std::vector<uint32_t>> range_boundaries;
   calc_alldata_boundaries(data, range_boundaries, range_size_avx512);
 
-  auto avx2b_aux = fastscancount::implb::get_all_aux(data);
+  auto avx2b_aux32 = fastscancount::implb::get_all_aux<uint32_t>(data);
+  auto avx2b_aux16 = fastscancount::implb::get_all_aux<uint16_t>(data);
 
   std::vector<const std::vector<uint32_t>*> data_ptrs;
   std::vector<const std::vector<uint32_t>*> range_ptrs;
 
   float elapsed = 0, elapsed_fast = 0, elapsed_avx = 0,
-      elapsed_avx2bb = 0, elapsed_avx512 = 0, dummy = 0;
+      elapsed_avx2bb = 0, elapsed_avx2b16 = 0, elapsed_avx512 = 0, dummy = 0;
 
   size_t sum_total = 0;
 
@@ -335,16 +339,20 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
       print_headers();
 
     BENCHTEST(scancount, "baseline scancount", elapsed);
-    BENCHTEST(fastscancount, "cache-sensitive scancount", elapsed_fast);
+    BENCHTEST(fastscancount::fastscancount, "cache-sensitive scancount", elapsed_fast);
 
 #ifdef __AVX2__
     BENCHTEST(fastscancount_avx2, "AVX2-based scancount", elapsed_avx);
 
-    BENCHTEST(fastscancount_avx2b<fastscancount::record_hits_c>, "Try2 AVX2 in C", dummy, avx2b_aux, query_elem);
+    // BENCHTEST(fastscancount_avx2b32<fastscancount::record_hits_c>, "Try2 AVX2 in C", dummy, avx2b_aux32, query_elem);
 
-    BENCHTEST(fastscancount_avx2b<fastscancount::record_hits_asm_branchy>, "AVX2 in ASM branchy", elapsed_avx2bb, avx2b_aux, query_elem);
+    BENCHTEST((fastscancount_avx2b<uint32_t, fastscancount::record_hits_asm_branchy32>), "AVX2B ASM branchy    32b", elapsed_avx2bb,  avx2b_aux32, query_elem);
+    BENCHTEST((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchy16>), "AVX2B ASM branchy    16b", elapsed_avx2b16, avx2b_aux16, query_elem);
+    // BENCHTEST((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchyB >), "AVX2B ASM branchy      B", dummy, avx2b_aux16, query_elem);
 
-    BENCHTEST(fastscancount_avx2b<fastscancount::record_hits_asm_branchless>, "AVX2 in ASM branchless", dummy, avx2b_aux, query_elem);
+    // BENCHTEST(fastscancount_avx2b<fastscancount::record_hits_asm_branchy32>, "AVX2 in ASM branchy", elapsed_avx2bb, avx2b_aux32, query_elem);
+
+    // BENCHTEST(fastscancount_avx2b<fastscancount::record_hits_asm_branchless32>, "AVX2 in ASM branchless", dummy, avx2b_aux32, query_elem);
 #endif
 #ifdef __AVX512F__
     bench(
@@ -355,11 +363,12 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
 #endif
   }
   std::cout << "Elems per millisecond:" << std::endl;
-  std::cout << "scancount:      " << (sum_total/(elapsed/1e3)) << std::endl;
-  std::cout << "fastscancount:  " << (sum_total/(elapsed_fast/1e3)) << std::endl;
+  std::cout << "scancount:       " << (sum_total/(elapsed/1e3)) << std::endl;
+  std::cout << "fastscancount:   " << (sum_total/(elapsed_fast/1e3)) << std::endl;
 #ifdef __AVX2__
-  std::cout << "fastscan_avx2:  " << (sum_total/(elapsed_avx/1e3)) << std::endl;
-  std::cout << "fastscan_avx2bb:" << (sum_total/(elapsed_avx2bb/1e3)) << std::endl;
+  std::cout << "fastscan_avx2:   " << (sum_total/(elapsed_avx/1e3)) << std::endl;
+  std::cout << "fastscan_avx2bb: " << (sum_total/(elapsed_avx2bb/1e3)) << std::endl;
+  std::cout << "fastscan_avx2b16:" << (sum_total/(elapsed_avx2b16/1e3)) << std::endl;
 #endif
 #ifdef __AVX512F__
   std::cout << "fastscancount_avx512: " << (sum_total/(elapsed_avx512/1e3)) << std::endl;
@@ -372,6 +381,9 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
 #define OUT(x) std::cout << #x ": " << x << '\n';
 
 void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) {
+
+  using namespace fastscancount;
+
   std::vector<std::vector<uint32_t>> data(array_count);
 
   std::vector<const std::vector<uint32_t>*> data_ptrs;
@@ -416,7 +428,9 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
   }
 
   // aux data for avx2b
-  auto avx2b_aux = fastscancount::implb::get_all_aux(data);
+  auto avx2b_aux32 = fastscancount::implb::get_all_aux<uint32_t>(data);
+  auto avx2b_aux16 = fastscancount::implb::get_all_aux<uint16_t>(data);
+
   // query definition composed of all the arrays
   std::vector<uint32_t> query_elem(data.size());
   std::iota(query_elem.begin(), query_elem.end(), 0);
@@ -432,16 +446,20 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
 
   // BENCH_LOOP(scancount, "baseline scancount", elapsed);
 
-  BENCH_LOOP(fastscancount, "fastscancount", elapsed_fast);
+  // BENCH_LOOP(fastscancount, "fastscancount", elapsed_fast);
 
 #ifdef __AVX2__
-  BENCH_LOOP(fastscancount_avx2,  "AVX2-based scancount", elapsed_avx);
+  // BENCH_LOOP(fastscancount_avx2,  "AVX2-based scancount", elapsed_avx);
 
-  BENCH_LOOP(fastscancount_avx2b<fastscancount::record_hits_c>, "Try2 AVX2 in C", dummy, avx2b_aux, query_elem);
+  // BENCH_LOOP((fastscancount_avx2b<uint32_t, fastscancount::record_hits_c>), "AVX2B in C 32b", dummy, avx2b_aux32, query_elem);
+  // BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_c>), "AVX2B in C 16b", dummy, avx2b_aux16, query_elem);
 
-  BENCH_LOOP(fastscancount_avx2b<fastscancount::record_hits_asm_branchy>, "AVX2 in ASM branchy", elapsed_avx2bb, avx2b_aux, query_elem);
+  // BENCH_LOOP((fastscancount_avx2b<uint32_t, fastscancount::record_hits_asm_branchy32>), "AVX2B ASM branchy    32b", elapsed_avx2bb, avx2b_aux32, query_elem);
+  // BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchy16>), "AVX2B ASM branchy    16b", dummy, avx2b_aux16, query_elem);
+  BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchyB >), "AVX2B ASM branchy      B", dummy, avx2b_aux16, query_elem);
 
-  BENCH_LOOP(fastscancount_avx2b<fastscancount::record_hits_asm_branchless>, "AVX2 in ASM branchless", dummy, avx2b_aux, query_elem);
+  // BENCH_LOOP((fastscancount_avx2b<uint32_t, fastscancount::record_hits_asm_branchless32>), "AVX2B ASM branchless 32b", dummy, avx2b_aux32, query_elem);
+  // BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchless16>), "AVX2B ASM branchless 16b", dummy, avx2b_aux16, query_elem);
 #endif
 
   for (size_t t = 0; t < REPEATS; t++) {
