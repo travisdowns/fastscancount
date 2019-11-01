@@ -468,17 +468,19 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
   BENCH_LOOP(fastscancount_avx512, "AVX512-based scancount", elapsed_avx512, range_size_avx512, range_ptrs);
 #endif
 
-  std::cout << std::fixed << std::setprecision(0);
-  std::cout << "Elems per millisecond" << std::endl;
-  std::cout << "scancount:       " << std::setw(8) << (sum_total/(elapsed/1e3)) << std::endl;
-  std::cout << "fastscancount:   " << std::setw(8) << (sum_total/(elapsed_fast/1e3)) << std::endl;
+  std::cout << std::fixed;
+#define ELAPSEDOUT(var) std::setprecision(0) << (sum_total/(var/1e3)) \
+    << std::setprecision(2) << std::setw(8) << (elapsed_fast/var) << '\n'
+  std::cout << "Algorithm        Elems/ms   Speedup vs fastscancount" << std::endl;
+  std::cout << "scancount:       " << std::setw(8) << ELAPSEDOUT(elapsed);
+  std::cout << "fastscancount:   " << std::setw(8) << ELAPSEDOUT(elapsed_fast);
 #ifdef __AVX2__
-  std::cout << "fastscan_avx2:   " << std::setw(8) << (sum_total/(elapsed_avx/1e3)) << std::endl;
-  std::cout << "fastscan_avx2bb: " << std::setw(8) << (sum_total/(elapsed_avx2bb/1e3)) << std::endl;
-  std::cout << "fastscan_avx2b16:" << std::setw(8) << (sum_total/(elapsed_avx2b16/1e3)) << std::endl;
+  std::cout << "fastscan_avx2:   " << std::setw(8) << ELAPSEDOUT(elapsed_avx);
+  std::cout << "fastscan_avx2bb: " << std::setw(8) << ELAPSEDOUT(elapsed_avx2bb);
+  std::cout << "fastscan_avx2b16:" << std::setw(8) << ELAPSEDOUT(elapsed_avx2b16);
 #endif
 #ifdef __AVX512F__
-  std::cout << "fastsct_avx512:  " << std::setw(8) << (sum_total/(elapsed_avx512/1e3)) << std::endl;
+  std::cout << "fastsct_avx512:  " << std::setw(8) << ELAPSEDOUT(elapsed_avx512);
 #endif
 
   std::cout << std::flush;
