@@ -79,14 +79,14 @@ std::vector<column_spec> all_columns = {
 #ifdef USE_COUNTERS
   // you must always leave CPU_CYCLES enabled
   { HW_EVENT(CPU_CYCLES   ),                  "cycles/element", [](double val, double cycles, size_t sum) -> double { return val / sum;          } },
-  { HW_EVENT(INSTRUCTIONS ),                  "instr/cycle",    [](double val, double cycles, size_t sum) -> double { return val / cycles; } },
-  { HW_EVENT(INSTRUCTIONS ),                  "instr/elem",     [](double val, double cycles, size_t sum) -> double { return val / sum; } },
-  { HW_EVENT(BRANCH_MISSES),                  "miss/element",   [](double val, double cycles, size_t sum) -> double { return val / sum;          } },
+  // { HW_EVENT(INSTRUCTIONS ),                  "instr/cycle",    [](double val, double cycles, size_t sum) -> double { return val / cycles; } },
+  // { HW_EVENT(INSTRUCTIONS ),                  "instr/elem",     [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  // { HW_EVENT(BRANCH_MISSES),                  "miss/element",   [](double val, double cycles, size_t sum) -> double { return val / sum;          } },
   { {PERF_TYPE_RAW, EVENT_L1D_REPL,        }, "l1 repl/element",[](double val, double cycles, size_t sum) -> double { return val / sum;    } },
   { {PERF_TYPE_RAW, EVENT_UOPS_ISSUED,     }, "uops/cycle",     [](double val, double cycles, size_t sum) -> double { return val / cycles; } },
-  { {PERF_TYPE_RAW, EVENT_UOPS_ISSUED,     }, "uops/elem",      [](double val, double cycles, size_t sum) -> double { return val / sum; } },
-  { {PERF_TYPE_RAW, EVENT_PEND_MISS,       }, "pmiss/elem",     [](double val, double cycles, size_t sum) -> double { return val / sum; } },
-  { {PERF_TYPE_RAW, EVENT_PEND_MISS_CYCLES,}, "pmiss_cyc/elem", [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  // { {PERF_TYPE_RAW, EVENT_UOPS_ISSUED,     }, "uops/elem",      [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  // { {PERF_TYPE_RAW, EVENT_PEND_MISS,       }, "pmiss/elem",     [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  // { {PERF_TYPE_RAW, EVENT_PEND_MISS_CYCLES,}, "pmiss_cyc/elem", [](double val, double cycles, size_t sum) -> double { return val / sum; } },
 #endif
 };
 
@@ -326,7 +326,7 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
 #ifdef __AVX512F__
     test(
       [&](){
-        fastscancount::fastscancount_avx512(range_size_avx512, data_ptrs, range_ptrs, answer, threshold);
+        fastscancount::fastscancount_avx512(data_ptrs, answer, threshold, range_size_avx512, range_ptrs);
       }, data_ptrs, answer, threshold, "fastscancount_avx512"
     );
 #endif
@@ -359,7 +359,7 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
 #ifdef __AVX512F__
     bench(
         [&]() {
-          fastscancount::fastscancount_avx512(range_size_avx512, data_ptrs, range_ptrs, answer, threshold);
+          fastscancount::fastscancount_avx512(data_ptrs, answer, threshold, range_size_avx512, range_ptrs);
         },
         "AVX512-based scancount", elapsed_avx512, answer, sum, expected, print);
 #endif
@@ -446,12 +446,12 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
 
   print_headers();
 
-  BENCH_LOOP(scancount, "baseline scancount", elapsed);
+  // BENCH_LOOP(scancount, "baseline scancount", elapsed);
 
-  BENCH_LOOP(fastscancount::fastscancount, "fastscancount", elapsed_fast);
+  // BENCH_LOOP(fastscancount::fastscancount, "fastscancount", elapsed_fast);
 
 #ifdef __AVX2__
-  BENCH_LOOP(fastscancount_avx2,  "AVX2-based scancount", elapsed_avx);
+  // BENCH_LOOP(fastscancount_avx2,  "AVX2-based scancount", elapsed_avx);
 
   BENCH_LOOP((fastscancount_avx2b<uint32_t, fastscancount::record_hits_c>), "AVX2B in C 32b", dummy, avx2b_aux32, query_elem);
   BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_c>), "AVX2B in C 16b", dummy, avx2b_aux16, query_elem);
@@ -464,32 +464,17 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
   BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchless16>), "AVX2B ASM branchless 16b", dummy, avx2b_aux16, query_elem);
 #endif
 
-  for (size_t t = 0; t < REPEATS; t++) {
-    bool last = (t == REPEATS - 1);
 #ifdef __AVX512F__
-#ifdef RUNNINGTESTS
-    test(
-      [&](){
-        fastscancount::fastscancount_avx512(range_size_avx512, data_ptrs, range_ptrs, answer, threshold);
-      }, data_ptrs, answer, threshold, "fastscancount_avx512"
-    );
+  BENCH_LOOP(fastscancount_avx512, "AVX512-based scancount", elapsed_avx512, range_size_avx512, range_ptrs);
 #endif
 
-    bench(
-        [&]() {
-          fastscancount::fastscancount_avx512(range_size_avx512, data_ptrs, range_ptrs, answer, threshold);
-        },
-        "AVX512-based scancount", elapsed_avx512, answer, sum, expected, last);
-#endif
-  }
-
+  std::cout << std::fixed;
   std::cout << "Elems per millisecond:" << std::endl;
-  std::cout << "scancount:          " << (sum_total/(elapsed/1e3)) << std::endl;
-  std::cout << "fastscancount:      " << (sum_total/(elapsed_fast/1e3)) << std::endl;
+  std::cout << "scancount:            " << (sum_total/(elapsed/1e3)) << std::endl;
+  std::cout << "fastscancount:        " << (sum_total/(elapsed_fast/1e3)) << std::endl;
 #ifdef __AVX2__
-  std::cout << "fastscancount_avx2: " << (sum_total/(elapsed_avx/1e3)) << std::endl;
-  std::cout << "fastscan_avx2bb:    " << (sum_total/(elapsed_avx2bb/1e3)) << std::endl;
-  std::cout << "fastscan_avx2b16:   " << (sum_total/(elapsed_avx2b16/1e3)) << std::endl;
+  std::cout << "fastscancount_avx2:   " << (sum_total/(elapsed_avx/1e3)) << std::endl;
+  std::cout << "fastscan_avx2bb:      " << (sum_total/(elapsed_avx2bb/1e3)) << std::endl;
 #endif
 #ifdef __AVX512F__
   std::cout << "fastscancount_avx512: " << (sum_total/(elapsed_avx512/1e3)) << std::endl;
