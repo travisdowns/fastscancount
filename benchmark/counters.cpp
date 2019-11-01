@@ -447,21 +447,20 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
   print_headers();
 
   // BENCH_LOOP(scancount, "baseline scancount", elapsed);
-
   // BENCH_LOOP(fastscancount::fastscancount, "fastscancount", elapsed_fast);
 
 #ifdef __AVX2__
   // BENCH_LOOP(fastscancount_avx2,  "AVX2-based scancount", elapsed_avx);
 
-  BENCH_LOOP((fastscancount_avx2b<uint32_t, fastscancount::record_hits_c>), "AVX2B in C 32b", dummy, avx2b_aux32, query_elem);
-  BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_c>), "AVX2B in C 16b", dummy, avx2b_aux16, query_elem);
+  // BENCH_LOOP((fastscancount_avx2b<uint32_t, fastscancount::record_hits_c>), "AVX2B in C 32b", dummy, avx2b_aux32, query_elem);
+  // BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_c>), "AVX2B in C 16b", dummy, avx2b_aux16, query_elem);
 
   BENCH_LOOP((fastscancount_avx2b<uint32_t, fastscancount::record_hits_asm_branchy32>), "AVX2B ASM branchy    32b", elapsed_avx2bb, avx2b_aux32, query_elem);
-  BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchy16>), "AVX2B ASM branchy    16b", dummy, avx2b_aux16, query_elem);
-  BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchyB >), "AVX2B ASM branchy      B", dummy, avx2b_aux16, query_elem);
+  // BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchy16>), "AVX2B ASM branchy    16b", dummy, avx2b_aux16, query_elem);
+  // BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchyB >), "AVX2B ASM branchy      B", dummy, avx2b_aux16, query_elem);
 
-  BENCH_LOOP((fastscancount_avx2b<uint32_t, fastscancount::record_hits_asm_branchless32>), "AVX2B ASM branchless 32b", dummy, avx2b_aux32, query_elem);
-  BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchless16>), "AVX2B ASM branchless 16b", dummy, avx2b_aux16, query_elem);
+  // BENCH_LOOP((fastscancount_avx2b<uint32_t, fastscancount::record_hits_asm_branchless32>), "AVX2B ASM branchless 32b", dummy, avx2b_aux32, query_elem);
+  // BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchless16>), "AVX2B ASM branchless 16b", dummy, avx2b_aux16, query_elem);
 #endif
 
 #ifdef __AVX512F__
