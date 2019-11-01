@@ -39,3 +39,9 @@
 
 # data folder
 /data
+
+# perf files
+/perf.data
+/perf.data.old
+
+/.vscode

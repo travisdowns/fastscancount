@@ -10,12 +10,13 @@
 #endif
 
 #include <algorithm>
+#include <assert.h>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <type_traits>
 #include <vector>
-#include <assert.h>
 
 #include <stdio.h>
 
@@ -518,6 +519,27 @@ void memzero(void *dest, size_t count) {
 template <size_t count, size_t U = 4>
 HEDLEY_NEVER_INLINE
 void memzero(void *dest) {
+#if defined(__AVX512F__) && defined(USE_AVX512_IN_SCALAR)
+  constexpr size_t chunk_size = U * 64;
+  static_assert(count >= chunk_size, "count too small");
+  // printf("mzalign: %zu\n", get_alignment(dest));
+  constexpr size_t chunks = count / chunk_size;
+  __m512i zero = _mm512_set1_epi32(zeroint);
+  __m512i* dest512 = (__m512i*)dest;
+  for (long i = 0; i < chunks; i++) {
+    for (size_t j = 0; j < U; j++) {
+        _mm512_storeu_si512(dest512 + i * U + j, zero);
+    }
+  }
+  constexpr auto rest = count - chunks * chunk_size;
+  constexpr auto rest_vecs = (rest + 63) / 64;
+  static_assert(rest_vecs * 64 < count, "count too small");
+  dest512 = (__m512i*)((char *)dest + count - rest_vecs * 64);
+  for (size_t j = 0; j < rest_vecs; j++) {
+      _mm512_storeu_si512(dest512 + j, zero);
+  }
+
+#else
   constexpr size_t chunk_size = U * 32;
   static_assert(count >= chunk_size, "count too small");
   // printf("mzalign: %zu\n", get_alignment(dest));
@@ -536,13 +558,43 @@ void memzero(void *dest) {
   for (size_t j = 0; j < rest_vecs; j++) {
       _mm256_storeu_si256(dest256 + j, zero);
   }
+#endif
 }
 
-template <typename T>
+template <typename T, size_t U = 4>
 HEDLEY_NEVER_INLINE
-void copymem(T* HEDLEY_RESTRICT dest, const T* src, size_t count) {
-  for (T* end = dest + count; dest != end; dest++, src++) {
-    *dest = *src;
+__attribute__((optimize("no-tree-loop-distribute-patterns"))) // prevent AVX-512 downclocking
+void copymem(T* HEDLEY_RESTRICT dest, const T* HEDLEY_RESTRICT src, size_t count) {
+
+  static_assert(std::is_trivially_copyable<T>::value, "type cannot be copied with memcpy");
+
+  // printf("copymem align D: %zu\n", get_alignment(dest));
+  // printf("copymem align S: %zu\n", get_alignment(src));
+  // asm ("rep movsb\n"
+  // :
+  // : "S"(src), "D"(dest), "c"(count)
+  // : "memory"
+  // );
+
+  constexpr size_t chunk_size = U * 32;
+  size_t byte_count = sizeof(T) * count;
+  size_t chunks = byte_count / chunk_size;
+  // __m256i zero = _mm256_set1_epi32(zeroint);
+  __m256i* dest256 = (__m256i*)dest;
+  __m256i* src256 = (__m256i*)src;
+  for (long i = 0; i < chunks; i++) {
+    for (size_t j = 0; j < U; j++) {
+      size_t offset = i * U + j;
+      _mm256_storeu_si256(dest256 + offset, _mm256_loadu_si256(src256 + offset));
+    }
+  }
+  auto rest = byte_count - chunks * chunk_size;
+  auto rest_vecs = (rest + 31) / 32;
+  assert(rest_vecs * 32 <= byte_count); // can't safely handle byte counts in the 1-31 range
+  dest256 = (__m256i*)((char *)dest + byte_count - rest_vecs * 32);
+  src256  = (__m256i*)((char *)src  + byte_count - rest_vecs * 32);
+  for (size_t j = 0; j < rest_vecs; j++) {
+      _mm256_storeu_si256(dest256 + j, _mm256_loadu_si256(src256 + j));
   }
 }
 
@@ -555,6 +607,8 @@ template <typename T, kernel_fn<T> K>
 void fastscancount_avx2b(const implb::data_ptrs &, std::vector<uint32_t> &out,
                          uint8_t threshold, const implb::all_aux_t<T>& all_aux_info,
                          const std::vector<uint32_t>& data_indexes) {
+
+  _mm256_zeroupper();
 
   using namespace implb;
   using aux_chunk = aux_chunk_t<T>;

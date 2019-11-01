@@ -41,7 +41,7 @@ class histogram {
 public:
     histogram(std::vector<T> bounds) : bounds{std::move(bounds)}, counts(this->bounds.size() + 1), sum{0} {
         assert(!bounds.empty());
-        assert(std::is_sorted(bounds));
+        assert(std::is_sorted(bounds.begin(), bounds.end()));
     }
 
     void accept(const T& t) {
