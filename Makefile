@@ -12,11 +12,11 @@ CXXFLAGS := -std=c++17 $(OPT) -march=native -g $(NDEBUG)
 
 LOCAL_MK = $(wildcard local.mk)
 
-counter: counters.o asm-kernels.o
+counter: counters.o analyze.o asm-kernels.o
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $^
 
-counters.o: benchmark/counters.cpp benchmark/*.h include/*.h Makefile $(LOCAL_MK)
-	$(CXX) $(CXXFLAGS) $(CXXEXTRA) -c benchmark/counters.cpp -Ibenchmark -Iinclude
+%.o : benchmark/%.cpp benchmark/*.h include/*.h Makefile $(LOCAL_MK)
+	$(CXX) $(CXXFLAGS) $(CXXEXTRA) -c $< -Ibenchmark -Iinclude
 
 asm-kernels.o: asm-kernels.asm $(LOCAL_MK)
 	$(NASM) $(NASMFLAGS) -felf64 $<

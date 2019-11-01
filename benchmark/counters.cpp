@@ -1,6 +1,7 @@
 // Fine-grained statistics is available only on Linux
 #include "fastscancount.h"
 #include "ztimer.h"
+#include "analyze.hpp"
 #ifdef __AVX2__
 #include "fastscancount_avx2.h"
 #include "fastscancount_avx2b.h"
@@ -25,7 +26,7 @@
 //////////////////////
 
 /* the number of times to run each benchmark in demo mode */
-#define REPEATS 1000
+#define REPEATS 100
 #define START_THRESHOLD 10
 #define END_THRESHOLD   11
 
@@ -37,6 +38,7 @@
 constexpr size_t MAX_QUERIES = 100;
 
 constexpr bool PRINT_ALL = true;
+constexpr bool do_analyze = false;
 
 /////////////////////
 // all mode params //
@@ -451,15 +453,15 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
 #ifdef __AVX2__
   BENCH_LOOP(fastscancount_avx2,  "AVX2-based scancount", elapsed_avx);
 
-  // BENCH_LOOP((fastscancount_avx2b<uint32_t, fastscancount::record_hits_c>), "AVX2B in C 32b", dummy, avx2b_aux32, query_elem);
-  // BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_c>), "AVX2B in C 16b", dummy, avx2b_aux16, query_elem);
+  BENCH_LOOP((fastscancount_avx2b<uint32_t, fastscancount::record_hits_c>), "AVX2B in C 32b", dummy, avx2b_aux32, query_elem);
+  BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_c>), "AVX2B in C 16b", dummy, avx2b_aux16, query_elem);
 
-  // BENCH_LOOP((fastscancount_avx2b<uint32_t, fastscancount::record_hits_asm_branchy32>), "AVX2B ASM branchy    32b", elapsed_avx2bb, avx2b_aux32, query_elem);
-  // BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchy16>), "AVX2B ASM branchy    16b", dummy, avx2b_aux16, query_elem);
+  BENCH_LOOP((fastscancount_avx2b<uint32_t, fastscancount::record_hits_asm_branchy32>), "AVX2B ASM branchy    32b", elapsed_avx2bb, avx2b_aux32, query_elem);
+  BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchy16>), "AVX2B ASM branchy    16b", dummy, avx2b_aux16, query_elem);
   BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchyB >), "AVX2B ASM branchy      B", dummy, avx2b_aux16, query_elem);
 
-  // BENCH_LOOP((fastscancount_avx2b<uint32_t, fastscancount::record_hits_asm_branchless32>), "AVX2B ASM branchless 32b", dummy, avx2b_aux32, query_elem);
-  // BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchless16>), "AVX2B ASM branchless 16b", dummy, avx2b_aux16, query_elem);
+  BENCH_LOOP((fastscancount_avx2b<uint32_t, fastscancount::record_hits_asm_branchless32>), "AVX2B ASM branchless 32b", dummy, avx2b_aux32, query_elem);
+  BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchless16>), "AVX2B ASM branchless 16b", dummy, avx2b_aux16, query_elem);
 #endif
 
   for (size_t t = 0; t < REPEATS; t++) {
@@ -552,7 +554,10 @@ int main(int argc, char *argv[]) {
     }
 
     std::cout << "Read " << data.size() << " posting arrays and " << queries.size() << " queries\n";
-    std::cout << "Largest max : " << get_largest(data) << "\nSmallest max: " << get_smallest_max(data) << "\n";
+
+    if (do_analyze) {
+      analyze(data, queries);
+    }
 
     try {
       demo_data(data, queries, threshold);

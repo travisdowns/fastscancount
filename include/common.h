@@ -11,7 +11,7 @@ inline T div_up(T p, T q) {
   return (p + q - 1) / q;
 }
 
-uint32_t get_largest(const std::vector<std::vector<uint32_t>>& data) {
+static inline uint32_t get_largest(const std::vector<std::vector<uint32_t>>& data) {
   uint32_t largest = 0;
   for (auto& v : data) {
     if (!v.empty())
@@ -20,7 +20,7 @@ uint32_t get_largest(const std::vector<std::vector<uint32_t>>& data) {
   return largest;
 }
 
-uint32_t get_smallest_max(const std::vector<std::vector<uint32_t>>& data) {
+static inline uint32_t get_smallest_max(const std::vector<std::vector<uint32_t>>& data) {
   uint32_t smallest = -1;
   for (auto& v : data) {
     if (!v.empty())
