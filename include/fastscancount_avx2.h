@@ -17,7 +17,7 @@
 
 namespace fastscancount {
 namespace impla {
-// credit: implementation and design by Travis Downes
+// credit: implementation and design by Travis Downs
 static inline size_t find_next_gt(uint8_t *array, const size_t size,
                                   const uint8_t threshold) {
   size_t vsize = size / 32;

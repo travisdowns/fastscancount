@@ -1,7 +1,22 @@
 #ifndef COMMON_H_
 #define COMMON_H_
 
+#include <assert.h>
 #include <inttypes.h>
+
+#include <vector>
+
+// #define DEBUGB 1
+
+#ifdef DEBUGB
+#define DBG(...) __VA_ARGS__
+#else
+#define DBG(...)
+#endif
+
+using data_array = std::vector<uint32_t>;
+using all_data = std::vector<data_array>;
+using data_ptrs = std::vector<const data_array *>;
 
 /* calculates p / q, rounded up, both p and q must be non-negative */
 template <typename T>
@@ -11,7 +26,21 @@ inline T div_up(T p, T q) {
   return (p + q - 1) / q;
 }
 
-uint32_t get_largest(const std::vector<std::vector<uint32_t>>& data) {
+constexpr size_t lg2(size_t n) {
+    assert(n > 0);
+    if (n > 1) {
+        return 1 + lg2(n / 2);
+    } else {
+        return 0;
+    }
+}
+
+constexpr size_t lg2_up(size_t n) {
+  assert(n > 0);
+  return n == 1 ? 0 : lg2(n - 1) + 1;
+}
+
+static inline uint32_t get_largest(const std::vector<std::vector<uint32_t>>& data) {
   uint32_t largest = 0;
   for (auto& v : data) {
     if (!v.empty())
@@ -20,7 +49,7 @@ uint32_t get_largest(const std::vector<std::vector<uint32_t>>& data) {
   return largest;
 }
 
-uint32_t get_smallest_max(const std::vector<std::vector<uint32_t>>& data) {
+static inline uint32_t get_smallest_max(const std::vector<std::vector<uint32_t>>& data) {
   uint32_t smallest = -1;
   for (auto& v : data) {
     if (!v.empty())

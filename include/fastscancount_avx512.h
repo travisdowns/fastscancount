@@ -19,7 +19,7 @@
 namespace fastscancount {
 namespace {
 
-// credit: inspired by 256-bit implementation of Travis Downes
+// credit: inspired by 256-bit implementation of Travis Downs
 void populate_hits_avx512(std::vector<uint8_t> &counters, size_t range,
                        size_t threshold, size_t start,
                        std::vector<uint32_t> &out) {
@@ -35,7 +35,7 @@ void populate_hits_avx512(std::vector<uint8_t> &counters, size_t range,
     uint64_t bits = _mm512_cmpgt_epi8_mask(v, comprand);
     while (bits) {
       unsigned zqty = __builtin_ctzll(bits);
-      bits >>= zqty; 
+      bits >>= zqty;
       bits >>= 1; // If zqty = 63, shift by 64 is not defined, need to split shifts
       out.push_back(start_add + zqty);
       start_add += zqty + 1;
@@ -51,7 +51,7 @@ void populate_hits_avx512(std::vector<uint8_t> &counters, size_t range,
 }
 
 void update_counters_avx512(const uint32_t  *&it_, const uint32_t  *end,
-                            uint8_t *counters, 
+                            uint8_t *counters,
                             const size_t shift) {
 
   if (it_ > end) {
@@ -75,7 +75,7 @@ void update_counters_avx512(const uint32_t  *&it_, const uint32_t  *end,
     // Then, we will blend by keeping three higher-order bytes in each 32-bit word unmodified
     // When 32-bit words overlap, the gather operation would first write the old values of the word
     // then it will overwrite them with new values. So, this should work just fine.
-    __m512i v = _mm512_mask_blend_epi8(blend_mask, v_orig, v_inc);
+    __m512i v = v_inc; // _mm512_mask_blend_epi8(blend_mask, v_orig, v_inc);
     _mm512_i32scatter_epi32((int*)counters, indx, v, 1);
   }
 
@@ -90,10 +90,10 @@ void update_counters_avx512(const uint32_t  *&it_, const uint32_t  *end,
 
 } // namespace
 
-void fastscancount_avx512(uint32_t cache_size,
-                          const std::vector<const std::vector<uint32_t>*> &data,
-                          const std::vector<const std::vector<uint32_t>*> &range_ends,
-                          std::vector<uint32_t> &out, uint8_t threshold) {
+void fastscancount_avx512(const std::vector<const std::vector<uint32_t>*> &data,
+                          std::vector<uint32_t> &out, uint8_t threshold,
+                          uint32_t cache_size,
+                          const std::vector<const std::vector<uint32_t>*> &range_ends) {
   std::vector<uint8_t> counters(cache_size);
   out.clear();
   const size_t dsize = data.size();
@@ -115,7 +115,7 @@ void fastscancount_avx512(uint32_t cache_size,
 
   std::vector<const uint32_t*> it(dsize);
   for (unsigned k = 0; k < dsize; ++k) {
-    const auto& v = *data[k];  
+    const auto& v = *data[k];
     if (!v.empty()) {
       it[k] = &v[0];
     }
