@@ -38,7 +38,7 @@
 constexpr size_t MAX_QUERIES = 1000; // 100;
 
 constexpr bool PRINT_ALL = true;
-constexpr bool do_analyze = false;
+constexpr bool do_analyze = true;
 
 /////////////////////
 // all mode params //

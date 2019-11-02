@@ -83,7 +83,29 @@ void check_chunk_freq(const std::vector<uint32_t>& array, size_t chunk) {
     }
 
     histo.out(std::cout);
+}
 
+
+void check_compressed_cost(const std::vector<uint32_t>& array, size_t chunk_size, size_t bytes_per_entry) {
+    size_t i = 0, upper_bound = chunk_size;
+    size_t total_bytes = 0, total_bytes_zeroopt = 0;
+    while (i < array.size()) {
+        std::vector<uint32_t> chunk;
+        chunk.reserve(16);
+        while (i < array.size() && array.at(i) < upper_bound) {
+            chunk.push_back(array[i]);
+            i++;
+        }
+
+        size_t bytes_needed = 8 + bytes_per_entry * chunk.size();
+        total_bytes += bytes_needed;
+        total_bytes_zeroopt += chunk.empty() ? 0 : bytes_needed;
+
+        upper_bound += chunk_size;
+    }
+
+    printf("Bits per entry          : %4.1f", 32. * total_bytes / array.size());
+    printf("Bits per entry (zeroopt): %4.1f", 32. * total_bytes_zeroopt / array.size());
 }
 
 void analyze(const std::vector<std::vector<uint32_t>>& data,
@@ -130,7 +152,8 @@ void analyze(const std::vector<std::vector<uint32_t>>& data,
             totali++;
         }
 
-        check_chunk_freq(d, 512);
+        // check_chunk_freq(d, 512);
+        check_compressed_cost(d, 512, 1);
     }
 
     std::cout << "totali: " << totali << "\n";
