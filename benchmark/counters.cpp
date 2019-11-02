@@ -26,7 +26,7 @@
 //////////////////////
 
 /* the number of times to run each benchmark in demo mode */
-#define REPEATS 100
+#define REPEATS 10
 #define START_THRESHOLD 10
 #define END_THRESHOLD   11
 
@@ -35,7 +35,7 @@
 //////////////////////
 
 /* the maximum number of queries to read from queries.bin */
-constexpr size_t MAX_QUERIES = 100;
+constexpr size_t MAX_QUERIES = 1000; // 100;
 
 constexpr bool PRINT_ALL = true;
 constexpr bool do_analyze = false;
@@ -87,6 +87,7 @@ std::vector<column_spec> all_columns = {
   // { {PERF_TYPE_RAW, EVENT_UOPS_ISSUED,     }, "uops/elem",      [](double val, double cycles, size_t sum) -> double { return val / sum; } },
   // { {PERF_TYPE_RAW, EVENT_PEND_MISS,       }, "pmiss/elem",     [](double val, double cycles, size_t sum) -> double { return val / sum; } },
   // { {PERF_TYPE_RAW, EVENT_PEND_MISS_CYCLES,}, "pmiss_cyc/elem", [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  { {PERF_TYPE_SOFTWARE, PERF_COUNT_SW_TASK_CLOCK}, "GHz", [](double val, double cycles, size_t sum) -> double { return cycles / val; } }
 #endif
 };
 
@@ -281,8 +282,8 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
   std::vector<const std::vector<uint32_t>*> data_ptrs;
   std::vector<const std::vector<uint32_t>*> range_ptrs;
 
-  float elapsed = 0, elapsed_fast = 0, elapsed_avx = 0,
-      elapsed_avx2bb = 0, elapsed_avx2b16 = 0, elapsed_avx512 = 0, dummy = 0;
+  float elapsed = 0, elapsed_fast = 0, elapsed_avx = 0, elapsed_avx2b32 = 0, elapsed_avx2b16 = 0,
+      elapsed_avx2b16b = 0, elapsed_avx2bl16 = 0, elapsed_avx512 = 0, dummy = 0;
 
   size_t sum_total = 0;
 
@@ -306,32 +307,9 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
     }
     sum_total += sum;
 
-    scancount(data_ptrs, answer, threshold);
+    fastscancount::fastscancount(data_ptrs, answer, threshold);
     const size_t expected = answer.size();
 
-#ifdef RUNNINGTESTS
-    test(
-      [&](){
-        fastscancount::fastscancount(data_ptrs, answer, threshold);
-      }, data_ptrs, answer, threshold, "fastscancount"
-    );
-#ifdef __AVX2__
-    test(
-      [&](){
-        fastscancount::fastscancount_avx2(data_ptrs, answer, threshold);
-      }, data_ptrs, answer, threshold, "fastscancount_avx2"
-    );
-#endif
-
-#ifdef __AVX512F__
-    test(
-      [&](){
-        fastscancount::fastscancount_avx512(data_ptrs, answer, threshold, range_size_avx512, range_ptrs);
-      }, data_ptrs, answer, threshold, "fastscancount_avx512"
-    );
-#endif
-
-#endif
     std::cout << "Qid: " << qid << " got " << expected << " hits [thresh = "
         << threshold << ", array count = " << data_ptrs.size() << "]\n";
 
@@ -340,46 +318,45 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
     if (print)
       print_headers();
 
-    BENCHTEST(scancount, "baseline scancount", elapsed);
+    // BENCHTEST(scancount, "baseline scancount", elapsed);
     BENCHTEST(fastscancount::fastscancount, "cache-sensitive scancount", elapsed_fast);
 
 #ifdef __AVX2__
     BENCHTEST(fastscancount_avx2, "AVX2-based scancount", elapsed_avx);
 
-    // BENCHTEST(fastscancount_avx2b32<fastscancount::record_hits_c>, "Try2 AVX2 in C", dummy, avx2b_aux32, query_elem);
+    BENCHTEST(fastscancount_avx2b32<fastscancount::record_hits_c>, "Try2 AVX2 in C", dummy, avx2b_aux32, query_elem);
 
-    BENCHTEST((fastscancount_avx2b<uint32_t, fastscancount::record_hits_asm_branchy32>), "AVX2B ASM branchy    32b", elapsed_avx2bb,  avx2b_aux32, query_elem);
+    BENCHTEST((fastscancount_avx2b<uint32_t, fastscancount::record_hits_asm_branchy32>), "AVX2B ASM branchy    32b", elapsed_avx2b32,  avx2b_aux32, query_elem);
     BENCHTEST((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchy16>), "AVX2B ASM branchy    16b", elapsed_avx2b16, avx2b_aux16, query_elem);
-    // BENCHTEST((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchyB >), "AVX2B ASM branchy      B", dummy, avx2b_aux16, query_elem);
+    // BENCHTEST((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchyB >), "AVX2B ASM branchy      B", elapsed_avx2b16b, avx2b_aux16, query_elem);
 
-    // BENCHTEST(fastscancount_avx2b<fastscancount::record_hits_asm_branchy32>, "AVX2 in ASM branchy", elapsed_avx2bb, avx2b_aux32, query_elem);
-
-    // BENCHTEST(fastscancount_avx2b<fastscancount::record_hits_asm_branchless32>, "AVX2 in ASM branchless", dummy, avx2b_aux32, query_elem);
+    // BENCHTEST((fastscancount_avx2b<uint32_t, fastscancount::record_hits_asm_branchless32>), "AVX2B ASM branchless 32b", dummy, avx2b_aux32, query_elem);
+    // BENCHTEST((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchless16>), "AVX2B ASM branchless 16b", elapsed_avx2bl16, avx2b_aux16, query_elem);
 #endif
 #ifdef __AVX512F__
-    bench(
-        [&]() {
-          fastscancount::fastscancount_avx512(data_ptrs, answer, threshold, range_size_avx512, range_ptrs);
-        },
-        "AVX512-based scancount", elapsed_avx512, answer, sum, expected, print);
+    BENCHTEST(fastscancount_avx512, "AVX512-based scancount", elapsed_avx512, range_size_avx512, range_ptrs);
 #endif
   }
-  std::cout << std::fixed << std::setprecision(0);
-  std::cout << "Elems per millisecond" << std::endl;
-  std::cout << "scancount:       " << std::setw(8) << (sum_total/(elapsed/1e3)) << std::endl;
-  std::cout << "fastscancount:   " << std::setw(8) << (sum_total/(elapsed_fast/1e3)) << std::endl;
+
+  std::cout << std::fixed;
+#define ELAPSEDOUT(var) std::setprecision(0) << (sum_total/(var/1e3)) \
+    << std::setprecision(2) << std::setw(8) << (elapsed_fast/var) << '\n'
+  std::cout << "Algorithm        Elems/ms    Speedup vs fastscancount" << std::endl;
+  std::cout << "scancount:        " << std::setw(8) << ELAPSEDOUT(elapsed);
+  std::cout << "fastscancount:    " << std::setw(8) << ELAPSEDOUT(elapsed_fast);
 #ifdef __AVX2__
-  std::cout << "fastscan_avx2:   " << std::setw(8) << (sum_total/(elapsed_avx/1e3)) << std::endl;
-  std::cout << "fastscan_avx2bb: " << std::setw(8) << (sum_total/(elapsed_avx2bb/1e3)) << std::endl;
-  std::cout << "fastscan_avx2b16:" << std::setw(8) << (sum_total/(elapsed_avx2b16/1e3)) << std::endl;
+  std::cout << "fastscan_avx2    :" << std::setw(8) << ELAPSEDOUT(elapsed_avx);
+  std::cout << "fastscan_avx2bb  :" << std::setw(8) << ELAPSEDOUT(elapsed_avx2b32);
+  std::cout << "fastscan_avx2b16 :" << std::setw(8) << ELAPSEDOUT(elapsed_avx2b16);
+  std::cout << "fastscan_avx2b16B:" << std::setw(8) << ELAPSEDOUT(elapsed_avx2b16b);
+  std::cout << "fastscan_avx2bl16:" << std::setw(8) << ELAPSEDOUT(elapsed_avx2bl16);
 #endif
 #ifdef __AVX512F__
-  std::cout << "fastsct_avx512:  " << std::setw(8) << (sum_total/(elapsed_avx512/1e3)) << std::endl;
+  std::cout << "fastsct_avx512:   " << std::setw(8) << ELAPSEDOUT(elapsed_avx512);
 #endif
 
+  std::cout << std::flush;
 }
-
-
 
 #define OUT(x) std::cout << #x ": " << x << '\n';
 
