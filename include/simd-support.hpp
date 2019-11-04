@@ -1,6 +1,7 @@
 #ifndef SIMD_SUPPORT_H_
 #define SIMD_SUPPORT_H_
 
+#include <array>
 #include <cassert>
 #include <cinttypes>
 #include <immintrin.h>
@@ -76,6 +77,14 @@ template <typename T = uint32_t, typename V>
 inline std::vector<T> to_vector(V in) {
     static_assert(sizeof(V) % sizeof(T) == 0, "T size must divide V");
     std::vector<T> out(sizeof(V) / sizeof(T));
+    store(out.data(), in);
+    return out;
+}
+
+template <typename T = uint32_t, typename V>
+inline std::array<T, sizeof(V) / sizeof(T)> to_array(V in) {
+    static_assert(sizeof(V) % sizeof(T) == 0, "T size must divide V");
+    std::array<T, sizeof(V) / sizeof(T)> out;
     store(out.data(), in);
     return out;
 }

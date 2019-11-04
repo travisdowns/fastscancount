@@ -176,6 +176,8 @@ TEST_CASE("accumulator") {
     accum_test<int_holder>();
 }
 
+#ifdef __AVX512F__
+
 /**
  * wrapper for accumulator<B, __m512i, m512_traits> so that
  * accept takes a plain integer like the version above, so
@@ -219,7 +221,6 @@ struct accum512_holder {
 };
 
 
-#ifdef __AVX512F__
 TEST_CASE("accumulator-512") {
     accum_test<accum512_holder>();
 }

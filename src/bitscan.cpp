@@ -40,7 +40,7 @@ void bitscan_avx512(const data_ptrs &, std::vector<uint32_t> &out,
     size_t offset = 0;
     for (auto& accum : accums) {
         __m512i flags = accum.get_saturated();
-        std::vector<uint64_t> flags64 = to_vector<uint64_t>(flags);
+        auto flags64 = to_array<uint64_t>(flags);
         assert(flags64.size() * 64 == btype::chunk_bits);
         for (auto f : flags64) {
             while (f) {
