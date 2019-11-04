@@ -84,6 +84,14 @@ struct default_traits {
         return l & r;
     }
 
+    static T or_(const T& l, const T& r) {
+        return l | r;
+    }
+
+    static T not_(const T& v) {
+        return ~v;
+    }
+
     static bool test(const T& v, size_t idx) {
         return v[idx];
     }
@@ -105,6 +113,18 @@ struct chunk_traits {
         return ret;
     }
 
+    static T or_(const T& l, const T& r) {
+        T ret(l);
+        ret |= r;
+        return ret;
+    }
+
+    static T not_(const T& v) {
+        T ret(v);
+        ~ret;
+        return ret;
+    }
+
     static bool test(const T& v, size_t idx) {
         return v[idx];
     }
@@ -121,15 +141,22 @@ struct chunk_traits {
 
 
 /**
- * Accumulator that can accumulate per-bit sums up to B bits.
+ * Accumulator that can accumulate per-bit sums up to B bits. When a
+ * value reaches the max of 2^B, it saturates.
  */
 template <size_t B, typename T, typename traits = default_traits<T>>
 class accumulator {
-    T bits[B];
+    T bits[B + 1]; // the last element is set for saturation
 
 public:
+    static constexpr size_t max = ((size_t)1) << B;
 
-    accumulator() : bits{} {}
+    accumulator(size_t initial = 0) : bits{} {
+        T ones = traits::not_(T{});
+        while (initial--) {
+            accept(ones);
+        }
+    }
 
     void accept(const T& addend) {
         T carry = addend;
@@ -138,25 +165,31 @@ public:
             carry = traits::and_(bits[bit], carry);
             bits[bit] = sum;
         }
-
-        if (!traits::zero(carry)) {
-            throw std::runtime_error("overflow in accumulator");
-        }
+        bits[B] = traits::or_(bits[B], carry);  // update saturation
     }
 
     /**
      * A vector with one element per vertical counter containing its sum.
+     *
+     * This method is very slow and is intended primarily for writing tests.
      */
     std::vector<size_t> get_sums() {
         std::vector<size_t> ret(traits::size());
-        size_t multiplier = 1;
-        for (size_t bit = 0; bit < B; bit++) {
-            for (size_t i = 0; i < traits::size(); i++) {
+        for (size_t i = 0; i < traits::size(); i++) {
+            size_t multiplier = 1;
+            for (size_t bit = 0; bit < B; bit++) {
                 ret[i] += traits::test(bits[bit], i) * multiplier;
+                multiplier *= 2;
             }
-            multiplier *= 2;
+            if (traits::test(bits[B], i)) {
+                ret[i] = max; // saturation
+            }
         }
         return ret;
+    }
+
+    T get_saturated() {
+        return bits[B];
     }
 
 };
@@ -220,6 +253,14 @@ struct m512_traits {
 
     static T and_(const T& l, const T& r) {
         return _mm512_and_si512(l, r);
+    }
+
+    static T or_(const T& l, const T& r) {
+        return _mm512_or_si512(l, r);
+    }
+
+    static T not_(const T& v) {
+        return _mm512_ternarylogic_epi32(v, v, v, 0x55);
     }
 
     static bool test(const T& v, size_t idx) {

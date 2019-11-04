@@ -1,4 +1,5 @@
 #include "bitscan.hpp"
+#include "simd-support.hpp"
 
 #include <immintrin.h>
 
@@ -13,12 +14,14 @@ void bitscan_avx512(const data_ptrs &, std::vector<uint32_t> &out,
 #ifndef __AVX512F__
     throw std::runtime_error("not compiled for AVX-512");
 #else
-
+    constexpr size_t A_BITS = 4;
+    using atype = accumulator<A_BITS, __m512i, m512_traits>;
     using btype = compressed_bitmap<T>;
 
-    std::vector<accumulator<7, __m512i, m512_traits>> accums;
-    accumulator<7, __m512i, m512_traits> accumz;
-    accums.resize(aux_info.get_chunk_count());
+    assert(atype::max >= threshold + 1u); // need to increase A_BITS if this fails
+    atype accum_init(atype::max - threshold - 1);
+    std::vector<atype> accums;
+    accums.resize(aux_info.get_chunk_count(), accum_init);
 
     for (auto did : query) {
         auto& bitmap = aux_info.bitmaps.at(did);
@@ -36,13 +39,17 @@ void bitscan_avx512(const data_ptrs &, std::vector<uint32_t> &out,
 
     size_t offset = 0;
     for (auto& accum : accums) {
-        auto sums = accum.get_sums();
-        for (size_t s = 0; s < sums.size(); s++) {
-            if (sums[s] > threshold) {
-                out.push_back(offset + s);
+        __m512i flags = accum.get_saturated();
+        std::vector<uint64_t> flags64 = to_vector<uint64_t>(flags);
+        assert(flags64.size() * 64 == btype::chunk_bits);
+        for (auto f : flags64) {
+            while (f) {
+                uint32_t idx = __builtin_ctzl(f);
+                out.push_back(idx + offset);
+                f &= (f - 1);
             }
+            offset += 64;
         }
-        offset += btype::chunk_bits;
     }
 
 #endif
