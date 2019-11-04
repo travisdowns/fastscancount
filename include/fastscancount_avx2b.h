@@ -23,14 +23,6 @@
 #include "hedley.h"
 #include "common.h"
 
-// #define DEBUGB 1
-
-#ifdef DEBUGB
-#define DBG(...) __VA_ARGS__
-#else
-#define DBG(...)
-#endif
-
 template <typename T>
 void findM(T& t, const char *name) {
   if (std::find(t.begin(), t.end(), 19999213) != t.end()) {
@@ -41,7 +33,7 @@ void findM(T& t, const char *name) {
 }
 
 namespace fastscancount {
-// credit: implementation and design by Travis Downes
+// credit: implementation and design by Travis Downs
 
 
 constexpr size_t cache_size = 40000 / 64 * 64;
@@ -113,7 +105,7 @@ static inline size_t find_next_gt2(uint8_t *array, const size_t size,
 }
 
 HEDLEY_NEVER_INLINE
-void populate_hits_avx(uint8_t *array, size_t range,
+static void populate_hits_avx(uint8_t *array, size_t range,
                        size_t threshold, size_t start,
                        std::vector<uint32_t> &out) {
   while (true) {
@@ -127,10 +119,6 @@ void populate_hits_avx(uint8_t *array, size_t range,
     start += (next + 1);
   }
 }
-
-using data_array = std::vector<uint32_t>;
-using all_data = std::vector<data_array>;
-using data_ptrs = std::vector<const data_array *>;
 
 /**
  * Each chunk of data in an input array has an associated aux_chunk
@@ -323,13 +311,13 @@ struct dynamic_aux {
   std::vector<uint32_t> max_overshoot;
 
   HEDLEY_NEVER_INLINE
-  dynamic_aux(const implb::all_aux_t<T>& all_aux_info, const std::vector<uint32_t>& data_indexes) {
+  dynamic_aux(const implb::all_aux_t<T>& all_aux_info, const std::vector<uint32_t>& query) {
 
-      /* extract the relevant aux_info arrays based on the given data_indexes */
+      /* extract the relevant aux_info arrays based on the given query */
     std::vector<aux_view> views;
     uint32_t largest = 0;
-    views.reserve(data_indexes.size());
-    for (auto i : data_indexes) {
+    views.reserve(query.size());
+    for (auto i : query) {
       assert(i < all_aux_info.aux_data.size());
       auto& aux_data = all_aux_info.aux_data[i];
       views.push_back(aux_data.get_view());
@@ -437,7 +425,7 @@ all_aux_t<T> get_all_aux_reordered(const all_data& data) {
 } // implb namespace
 
 #define counter_base (counters + COUNTER_OFFSET)
-alignas(64) uint8_t counters[counters_size];
+alignas(64) extern uint8_t counters[counters_size];
 
 template <typename T>
 using kernel_fn = void (const implb::aux_chunk_t<T>* aux_ptr,
@@ -470,7 +458,7 @@ void record_hits_c(const implb::aux_chunk_t<T>* aux_ptr,
   assert(iters_left > 0);
 
   for (;;) {
-    for (int i = 0; i < unroll; i++) {
+    for (size_t i = 0; i < unroll; i++) {
       T e = *eptr++;
       assert(e >= COUNTER_OFFSET || e == 0);
       assert(e < sizeof(counters));
@@ -501,16 +489,16 @@ void record_hits_c(const implb::aux_chunk_t<T>* aux_ptr,
   }
 }
 
-int zeroint;
+static int zeroint;
 
 HEDLEY_NEVER_INLINE
-void memzero(void *dest, size_t count) {
+static void memzero(void *dest, size_t count) {
   assert(count > 32);
   // printf("mzalign");
   size_t chunks = count / 32;
   __m256i zero = _mm256_set1_epi32(zeroint);
   __m256i* dest256 = (__m256i*)dest;
-  for (long i = 0; i < chunks; i++) {
+  for (size_t i = 0; i < chunks; i++) {
     _mm256_storeu_si256(dest256 + i, zero);
   }
   memset(dest256 + chunks, 0, count - chunks * 32);
@@ -546,7 +534,7 @@ void memzero(void *dest) {
   constexpr size_t chunks = count / chunk_size;
   __m256i zero = _mm256_set1_epi32(zeroint);
   __m256i* dest256 = (__m256i*)dest;
-  for (long i = 0; i < chunks; i++) {
+  for (size_t i = 0; i < chunks; i++) {
     for (size_t j = 0; j < U; j++) {
         _mm256_storeu_si256(dest256 + i * U + j, zero);
     }
@@ -582,7 +570,7 @@ void copymem(T* HEDLEY_RESTRICT dest, const T* HEDLEY_RESTRICT src, size_t count
   // __m256i zero = _mm256_set1_epi32(zeroint);
   __m256i* dest256 = (__m256i*)dest;
   __m256i* src256 = (__m256i*)src;
-  for (long i = 0; i < chunks; i++) {
+  for (size_t i = 0; i < chunks; i++) {
     for (size_t j = 0; j < U; j++) {
       size_t offset = i * U + j;
       _mm256_storeu_si256(dest256 + offset, _mm256_loadu_si256(src256 + offset));
@@ -601,12 +589,12 @@ void copymem(T* HEDLEY_RESTRICT dest, const T* HEDLEY_RESTRICT src, size_t count
 /**
  * Parameterized on K, the kernel function which does the core counter increment loop.
  *
- * @param data_indexes the list of indexes of posting arrays for this query
+ * @param query the list of indexes of posting arrays for this query
  */
 template <typename T, kernel_fn<T> K>
-void fastscancount_avx2b(const implb::data_ptrs &, std::vector<uint32_t> &out,
+void fastscancount_avx2b(const data_ptrs &, std::vector<uint32_t> &out,
                          uint8_t threshold, const implb::all_aux_t<T>& all_aux_info,
-                         const std::vector<uint32_t>& data_indexes) {
+                         const std::vector<uint32_t>& query) {
 
   _mm256_zeroupper();
 
@@ -614,12 +602,10 @@ void fastscancount_avx2b(const implb::data_ptrs &, std::vector<uint32_t> &out,
   using aux_chunk = aux_chunk_t<T>;
 
   out.clear();
-  const size_t dsize = data_indexes.size();
+  const size_t dsize = query.size();
 
-  dynamic_aux dyn_aux(all_aux_info, data_indexes);
+  dynamic_aux dyn_aux(all_aux_info, query);
 
-  size_t chunk = 0;
-  //memset(cdata, 0, 2 * cache_size * sizeof(counters[0]));
   memzero(counters, sizeof(counters));
   for (uint32_t range_start = 0, chunk = 0; range_start <= dyn_aux.largest; range_start += cache_size, chunk++) {
     uint32_t range_end = range_start + cache_size;

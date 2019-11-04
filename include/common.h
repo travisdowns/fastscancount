@@ -1,7 +1,22 @@
 #ifndef COMMON_H_
 #define COMMON_H_
 
+#include <assert.h>
 #include <inttypes.h>
+
+#include <vector>
+
+// #define DEBUGB 1
+
+#ifdef DEBUGB
+#define DBG(...) __VA_ARGS__
+#else
+#define DBG(...)
+#endif
+
+using data_array = std::vector<uint32_t>;
+using all_data = std::vector<data_array>;
+using data_ptrs = std::vector<const data_array *>;
 
 /* calculates p / q, rounded up, both p and q must be non-negative */
 template <typename T>

@@ -1,15 +1,15 @@
 #include <algorithm>
 #include <assert.h>
+#include <bitset>
 #include <iostream>
 #include <numeric>
 #include <tuple>
 #include <iterator>
+#include <functional>
 
 #include "analyze.hpp"
+#include "bitscan.hpp"
 #include "common.h"
-
-const size_t chunk_size = 40000;
-
 
 struct id_count {
     uint32_t id;
@@ -85,11 +85,37 @@ void check_chunk_freq(const std::vector<uint32_t>& array, size_t chunk) {
     histo.out(std::cout);
 }
 
+size_t elem_cost(const std::vector<uint32_t>& chunk, uint32_t base, size_t chunk_size, size_t bytes_per_entry) {
+    assert(base % chunk_size == 0);
+    size_t subchunk_size = bytes_per_entry * 8;
+    size_t needed = 0;
+    for (size_t i = 0; i < chunk.size();) {
+        auto e = chunk[i];
+        assert(e >= base);
+        assert(e < base + chunk_size);
+        e -= base;
+        needed++;
+        // figure out what chunk it goes into
+        size_t sublower = 0;
+        while (e >= sublower + subchunk_size)
+            sublower += subchunk_size;
+        assert(e >= sublower);
+        assert(e < sublower + subchunk_size);
+        // skip any subsequent elements that fall into same chunk
+        i++;
+        while (i < chunk.size() && (chunk.at(i) - base) < sublower + subchunk_size)
+            i++;
+    }
+    assert(needed <= chunk.size());
+    return needed * bytes_per_entry;
+}
+
 
 void check_compressed_cost(const std::vector<uint32_t>& array, size_t chunk_size, size_t bytes_per_entry) {
-    size_t i = 0, upper_bound = chunk_size;
-    size_t total_bytes = 0, total_bytes_zeroopt = 0;
+    size_t i = 0, lower_bound = 0;
+    size_t total_bytes = 0;
     while (i < array.size()) {
+        size_t upper_bound = lower_bound + chunk_size;
         std::vector<uint32_t> chunk;
         chunk.reserve(16);
         while (i < array.size() && array.at(i) < upper_bound) {
@@ -97,15 +123,13 @@ void check_compressed_cost(const std::vector<uint32_t>& array, size_t chunk_size
             i++;
         }
 
-        size_t bytes_needed = 8 + bytes_per_entry * chunk.size();
+        size_t bytes_needed = 8 / bytes_per_entry + elem_cost(chunk, lower_bound, chunk_size, bytes_per_entry);
         total_bytes += bytes_needed;
-        total_bytes_zeroopt += chunk.empty() ? 0 : bytes_needed;
-
-        upper_bound += chunk_size;
+        // printf("%zu bytes needed for %zu entries\n", bytes_needed, chunk.size());
+        lower_bound += chunk_size;
     }
 
-    printf("Bits per entry          : %4.1f", 32. * total_bytes / array.size());
-    printf("Bits per entry (zeroopt): %4.1f", 32. * total_bytes_zeroopt / array.size());
+    printf("Bits per entry          : %6.3f\n", 8. * total_bytes / array.size());
 }
 
 void analyze(const std::vector<std::vector<uint32_t>>& data,
@@ -147,13 +171,16 @@ void analyze(const std::vector<std::vector<uint32_t>>& data,
         // std::copy_n(d.begin(), 10, std::ostream_iterator<uint32_t>(std::cout, " "));
         // std::cout << "\n";
         for (auto e : d) {
+            // std::cout << e << " ";
             ++counts.at(e);
             // std::cout << "X: " << counts.at(e) << "\n";
             totali++;
         }
 
         // check_chunk_freq(d, 512);
-        check_compressed_cost(d, 512, 1);
+        check_compressed_cost(d, 512, 4);
+        compressed_bitmap<uint32_t> cb(d, largest);
+        printf("Bits per entry B        : %6.3f\n", 8. * cb.byte_size() / d.size());
     }
 
     std::cout << "totali: " << totali << "\n";
@@ -172,23 +199,3 @@ void analyze(const std::vector<std::vector<uint32_t>>& data,
 
 }
 
-// void analyze_scancount(const std::vector<const std::vector<uint32_t>*> &data,
-//                        std::vector<uint32_t> &out, size_t threshold) {
-//   uint64_t largest = 0;
-//   for(auto z : data) {
-//     const std::vector<uint32_t> & v = *z;
-//     if(v[v.size() - 1] > largest) largest = v[v.size() - 1];
-//   }
-//   std::vector<uint8_t> counters(largest+1);
-//   out.clear();
-//   for (size_t c = 0; c < data.size(); c++) {
-//     const std::vector<uint32_t> &v = *data[c];
-//     for (size_t i = 0; i < v.size(); i++) {
-//       counters[v[i]]++;
-//     }
-//   }
-//   for (uint32_t i = 0; i < counters.size(); i++) {
-//     if (counters[i] > threshold)
-//       out.push_back(i);
-//   }
-// }

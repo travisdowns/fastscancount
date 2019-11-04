@@ -2,6 +2,7 @@
 #include "fastscancount.h"
 #include "ztimer.h"
 #include "analyze.hpp"
+#include "bitscan.hpp"
 #ifdef __AVX2__
 #include "fastscancount_avx2.h"
 #include "fastscancount_avx2b.h"
@@ -21,14 +22,23 @@
 #include <numeric>
 #include <stdexcept>
 
-//////////////////////
-// demo mode params //
-//////////////////////
+/////////////////////////////
+// demo_random mode params //
+/////////////////////////////
 
 /* the number of times to run each benchmark in demo mode */
-#define REPEATS 10
-#define START_THRESHOLD 10
+#define REPEATS 1
+#define START_THRESHOLD  3
 #define END_THRESHOLD   11
+
+// constexpr size_t DEMO_DOMAIN  = 20000000;
+// constexpr size_t DEMO_ARRAY_SIZE  = 50000;
+// constexpr size_t DEMO_ARRAY_COUNT =   100;
+
+// fast params
+constexpr size_t DEMO_DOMAIN  =   200000;
+constexpr size_t DEMO_ARRAY_SIZE  = 5000;
+constexpr size_t DEMO_ARRAY_COUNT =   10;
 
 //////////////////////
 // data mode params //
@@ -161,6 +171,7 @@ void calc_alldata_boundaries(const std::vector<std::vector<uint32_t>>& data,
 template <typename F>
 void test(F f, const std::vector<const std::vector<uint32_t>*>& data_ptrs,
           std::vector<uint32_t>& answer, unsigned threshold, const std::string &name) {
+  answer.clear();
   fastscancount::scancount(data_ptrs, answer, threshold);
   size_t s1 = answer.size();
   auto a1 (answer);
@@ -209,13 +220,13 @@ void bench(F f, const std::string &name,
               << "\n";
 #ifdef USE_COUNTERS
   if (print) {
-    std::ios_base::fmtflags f(std::cout.flags());
+    std::ios_base::fmtflags flags(std::cout.flags());
     std::cout << std::setw(NAME_WIDTH) << name;
     std::cout << std::fixed << std::setprecision(4);
     for (auto& col : all_columns) {
       std::cout << std::setw(COL_WIDTH) << col.get_result(unified, sum);
     }
-    std::cout.flags(f);
+    std::cout.flags(flags);
     std::cout << '\n';
   }
 #endif
@@ -241,6 +252,7 @@ void print_headers() {
 #endif
 
 #define BENCH(fn, name, elapsed, ...) \
+  answer.clear();       \
   bench(                \
     [&]() {             \
       fn(data_ptrs, answer, threshold, ## __VA_ARGS__ ); \
@@ -408,8 +420,11 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
   }
 
   // aux data for avx2b
-  auto avx2b_aux32 = fastscancount::implb::get_all_aux<uint32_t>(data);
-  auto avx2b_aux16 = fastscancount::implb::get_all_aux<uint16_t>(data);
+  // auto avx2b_aux32 = fastscancount::implb::get_all_aux<uint32_t>(data);
+  // auto avx2b_aux16 = fastscancount::implb::get_all_aux<uint16_t>(data);
+
+  // aux data for bitscan
+  auto bitscan_aux32 = fastscancount::get_all_aux_bitscan<uint32_t>(data);
 
   // query definition composed of all the arrays
   std::vector<uint32_t> query_elem(data.size());
@@ -427,6 +442,12 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
   // BENCH_LOOP(scancount, "baseline scancount", elapsed);
   BENCH_LOOP(fastscancount::fastscancount, "fastscancount", elapsed_fast);
 
+  // BENCH_LOOP(bitscan_scalar, "bitscan_scalar", dummy, bitscan_aux32, query_elem);
+  BENCH_LOOP(bitscan_fake,  "bitscan_fake", dummy, bitscan_aux32, query_elem);
+#ifdef __AVX512F__
+  BENCH_LOOP(bitscan_avx512,  "bitscan_avx512", dummy, bitscan_aux32, query_elem);
+#endif
+
 #ifdef __AVX2__
   BENCH_LOOP(fastscancount_avx2,  "AVX2-based scancount", elapsed_avx);
 
@@ -434,7 +455,7 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
   // BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_c>), "AVX2B in C 16b", dummy, avx2b_aux16, query_elem);
 
   // BENCH_LOOP((fastscancount_avx2b<uint32_t, fastscancount::record_hits_asm_branchy32>), "AVX2B ASM branchy    32b", elapsed_avx2bb, avx2b_aux32, query_elem);
-  BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchy16>), "AVX2B ASM branchy    16b", elapsed_avx2b16, avx2b_aux16, query_elem);
+  // BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchy16>), "AVX2B ASM branchy    16b", elapsed_avx2b16, avx2b_aux16, query_elem);
   // BENCH_LOOP((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchyB >), "AVX2B ASM branchy      B", dummy, avx2b_aux16, query_elem);
 
   // BENCH_LOOP((fastscancount_avx2b<uint32_t, fastscancount::record_hits_asm_branchless32>), "AVX2B ASM branchless 32b", dummy, avx2b_aux32, query_elem);
@@ -537,7 +558,7 @@ int main(int argc, char *argv[]) {
       for (unsigned k = START_THRESHOLD; k < END_THRESHOLD; ++k) {
         std::cout << "RAND_MAX is " << RAND_MAX << std::endl;
         std::cout << "Demo threshold:" << k << std::endl;
-        demo_random(20000000, 50000, 100, k);
+        demo_random(DEMO_DOMAIN, DEMO_ARRAY_SIZE, DEMO_ARRAY_COUNT, k);
         std::cout << "=======================" << std::endl;
       }
     } catch (const std::exception& e) {

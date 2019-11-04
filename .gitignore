@@ -34,8 +34,9 @@
 # local makefile config
 /local.mk
 
-# output binary
+# output binaries
 /counter
+/unit-test
 
 # data folder
 /data

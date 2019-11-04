@@ -19,7 +19,7 @@
 namespace fastscancount {
 namespace {
 
-// credit: inspired by 256-bit implementation of Travis Downes
+// credit: inspired by 256-bit implementation of Travis Downs
 void populate_hits_avx512(std::vector<uint8_t> &counters, size_t range,
                        size_t threshold, size_t start,
                        std::vector<uint32_t> &out) {
