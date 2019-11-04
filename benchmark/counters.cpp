@@ -48,7 +48,7 @@ constexpr size_t DEMO_ARRAY_COUNT =   10;
 constexpr size_t MAX_QUERIES = 1000; // 100;
 
 constexpr bool PRINT_ALL = true;
-constexpr bool do_analyze = true;
+constexpr bool do_analyze = false;
 
 /////////////////////
 // all mode params //
@@ -288,6 +288,9 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
   std::vector<std::vector<uint32_t>> range_boundaries;
   calc_alldata_boundaries(data, range_boundaries, range_size_avx512);
 
+  // aux data for bitscan
+  auto bitscan_aux32 = fastscancount::get_all_aux_bitscan<uint32_t>(data);
+
   auto avx2b_aux32 = fastscancount::implb::get_all_aux<uint32_t>(data);
   auto avx2b_aux16 = fastscancount::implb::get_all_aux<uint16_t>(data);
 
@@ -295,7 +298,7 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
   std::vector<const std::vector<uint32_t>*> range_ptrs;
 
   float elapsed = 0, elapsed_fast = 0, elapsed_avx = 0, elapsed_avx2b32 = 0, elapsed_avx2b16 = 0,
-      elapsed_avx2b16b = 0, elapsed_avx2bl16 = 0, elapsed_avx512 = 0, dummy = 0;
+      elapsed_avx2b16b = 0, elapsed_avx2bl16 = 0, elapsed_bitscan = 0, elapsed_avx512 = 0, dummy = 0;
 
   size_t sum_total = 0;
 
@@ -346,6 +349,7 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
     // BENCHTEST((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchless16>), "AVX2B ASM branchless 16b", elapsed_avx2bl16, avx2b_aux16, query_elem);
 #endif
 #ifdef __AVX512F__
+    BENCHTEST(bitscan_avx512, "bitscan_avx512", elapsed_bitscan, bitscan_aux32, query_elem);
     BENCHTEST(fastscancount_avx512, "AVX512-based scancount", elapsed_avx512, range_size_avx512, range_ptrs);
 #endif
   }
@@ -364,6 +368,7 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
   std::cout << "fastscan_avx2bl16:" << std::setw(8) << ELAPSEDOUT(elapsed_avx2bl16);
 #endif
 #ifdef __AVX512F__
+  std::cout << "bitscan_avx512:   " << std::setw(8) << ELAPSEDOUT(elapsed_bitscan);
   std::cout << "fastsct_avx512:   " << std::setw(8) << ELAPSEDOUT(elapsed_avx512);
 #endif
 
