@@ -211,7 +211,7 @@ inline boost::dynamic_bitset<> to_bitset(__m512i v) {
     return boost::dynamic_bitset<>(blocks, blocks + sizeof(blocks) / sizeof(blocks[0]));
 }
 
-struct mm512_traits {
+struct m512_traits {
     using T = __m512i;
 
     static T xor_(const T& l, const T& r) {
