@@ -2,11 +2,12 @@
  * unit-test.cpp
  */
 
+#include "accum7.hpp"
+#include "bitscan.hpp"
 #include "catch.hpp"
-
 #include "compressed-bitmap.hpp"
 
-#include "bitscan.hpp"
+#include <random>
 
 using vst = std::vector<size_t>;
 using cb32 = compressed_bitmap<uint32_t>;
@@ -161,14 +162,17 @@ void accum_test()
         accum.accept(0b00); // 4 4
         REQUIRE(accum.get_saturated() == 0b11);
     }
-
-
 }
 
 struct int_holder {
     template <size_t B, size_t C>
     static auto make(size_t initial = 0) {
         return accumulator<B, int, int_traits<C>>(initial);
+    }
+
+    template <size_t C>
+    static auto make7(size_t initial = 0) {
+        return accum7<int, int_traits<C>>(initial);
     }
 };
 
@@ -185,19 +189,25 @@ TEST_CASE("accumulator") {
  *
  * The counter is limited to C counters for sanity.
  */
-template <size_t B, size_t C = 1>
-struct accum512 : fastscancount::accumulator<B, __m512i, fastscancount::m512_traits> {
+template <size_t C, typename base>
+struct accum512 : base {
     static_assert(C <= 32, "C too big"); // otherwise stuff that returns uint32_t won't work
-    using base = fastscancount::accumulator<B, __m512i, fastscancount::m512_traits>;
 
     accum512(size_t initial) : base{initial} {}
 
-    void accept(int v) {
-        auto v512 = _mm512_set_epi32(
+    __m512i to_vec(int i) {
+        return _mm512_set_epi32(
             0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, v
+            0, 0, 0, 0, 0, 0, 0, i
         );
-        base::accept(v512);
+    }
+
+    void accept(int v) {
+        base::accept(to_vec(v));
+    }
+
+    void accept7(int v0, int v1, int v2, int v3, int v4, int v5, int v6) {
+        base::accept7(to_vec(v0), to_vec(v1), to_vec(v2), to_vec(v3), to_vec(v4), to_vec(v5), to_vec(v6));
     }
 
     std::vector<size_t> get_sums() {
@@ -216,8 +226,14 @@ struct accum512 : fastscancount::accumulator<B, __m512i, fastscancount::m512_tra
 struct accum512_holder {
     template <size_t B, size_t C>
     static auto make(size_t initial = 0) {
-        return accum512<B, C>(initial);
+        return accum512<C, fastscancount::accumulator<B, __m512i, fastscancount::m512_traits>>(initial);
     }
+
+    template <size_t C>
+    static auto make7(size_t initial = 0) {
+        return accum512<C, accum7<__m512i, fastscancount::m512_traits>>(initial);;
+    }
+
 };
 
 
@@ -225,3 +241,152 @@ TEST_CASE("accumulator-512") {
     accum_test<accum512_holder>();
 }
 #endif
+
+template <typename A>
+void accept_n(A& a, int val, size_t n) {
+    while (n--) {
+        a.accept(val);
+    }
+}
+
+template <typename T>
+void test_accum7() {
+    {
+        auto accum = T::template make7<1>();
+
+        REQUIRE(accum.get_sums() == vst{0});
+        accum.accept(0);
+        REQUIRE(accum.get_sums() == vst{0});
+        accum.accept(1);
+        REQUIRE(accum.get_sums() == vst{1});
+        accum.accept(1);
+        REQUIRE(accum.get_sums() == vst{2});
+        accum.accept(1);
+        REQUIRE(accum.get_sums() == vst{3});
+        accum.accept(1);
+        REQUIRE(accum.get_sums() == vst{4});
+        accum.accept(1);
+        REQUIRE(accum.get_sums() == vst{5});
+        accum.accept(1);
+        REQUIRE(accum.get_sums() == vst{6});
+        accum.accept(1);
+        REQUIRE(accum.get_sums() == vst{7});
+        accum.accept(1);
+        REQUIRE(accum.get_sums() == vst{8});  // saturated
+        accum.accept(1);
+        REQUIRE(accum.get_sums() == vst{8});  // saturated
+        accum.accept(0);
+        REQUIRE(accum.get_sums() == vst{8});  // saturated
+
+    }
+
+    {
+        auto accum = T::template make7<2>();
+
+        REQUIRE(accum.get_sums() == vst{0, 0});
+        accum.accept(2);
+        for (size_t i = 0; i < 10; i++) {
+            size_t sum0 = std::min(accum.max, i + 1);
+            size_t sum1 = std::min(accum.max, i);
+
+            REQUIRE(accum.get_sums() == vst{sum1, sum0});
+
+            accum.accept(3);
+        }
+
+    }
+
+    {
+        auto accum = T::template make7<2>();
+
+        accum = T::template make7<2>(1);
+        REQUIRE(accum.get_sums() == vst{1, 1});
+
+        accum = T::template make7<2>(2);
+        REQUIRE(accum.get_sums() == vst{2, 2});
+
+        accum = T::template make7<2>(3);
+        REQUIRE(accum.get_sums() == vst{3, 3});
+
+        accum = T::template make7<2>(10);
+        REQUIRE(accum.get_sums() == vst{8, 8});
+    }
+
+    {
+        auto accum = T::template make7<2>();
+
+        REQUIRE(accum.get_saturated() == 0b00);
+
+        accum.accept(0b10);
+        REQUIRE(accum.get_saturated() == 0b00);
+        accum.accept(0b11); // 2 1
+        REQUIRE(accum.get_saturated() == 0b00);
+        accum.accept(0b11); // 3 2
+        REQUIRE(accum.get_saturated() == 0b00);
+        accum.accept(0b11); // 4 3
+        REQUIRE(accum.get_saturated() == 0b00);
+
+        accept_n(accum, 0b11, 4);
+        REQUIRE(accum.get_saturated() == 0b10);
+        accum.accept(0b01);
+        REQUIRE(accum.get_saturated() == 0b11);
+        accept_n(accum, 0b11, 10);
+        REQUIRE(accum.get_saturated() == 0b11);
+    }
+
+    std::mt19937_64 gen(0x12345678);
+    std::bernoulli_distribution d(0.5);
+
+    for (int iter = 0; iter < 10; iter++) {
+        auto accum = T::template make7<2>();
+        size_t sum0 = 0, sum1 = 0;
+        for (int inner = 0; inner < 20; inner++) {
+
+            REQUIRE(accum.get_sums() == vst{sum0, sum1});
+
+            int add0 = d(gen);
+            int add1 = d(gen);
+
+            accum.accept(add0 | (add1 << 1));
+
+            sum0 = std::min(accum.max, sum0 + add0);
+            sum1 = std::min(accum.max, sum1 + add1);
+        }
+    }
+
+    for (int iter = 0; iter < 10; iter++) {
+        auto accum = T::template make7<2>();
+        size_t sum0 = 0, sum1 = 0;
+        for (int inner = 0; inner < 20; inner++) {
+
+            REQUIRE(accum.get_sums() == vst{sum0, sum1});
+
+            bool is_sum1 = d(gen);
+
+            int add0 = d(gen) << is_sum1;
+            int add1 = d(gen) << is_sum1;
+            int add2 = d(gen) << is_sum1;
+            int add3 = d(gen) << is_sum1;
+            int add4 = d(gen) << is_sum1;
+            int add5 = d(gen) << is_sum1;
+            int add6 = d(gen) << is_sum1;
+
+            accum.accept7(add0, add1, add2, add3, add4, add5, add6);
+
+            auto& sum = is_sum1 ? sum1 : sum0;
+            sum = std::min(accum.max,
+                    sum + (add0 + add1 + add2 + add3 + add4 + add5 + add6 >> (is_sum1 ? 1 : 0)));
+        }
+    }
+
+}
+
+TEST_CASE("accum7")
+{
+    test_accum7<int_holder>();
+}
+
+TEST_CASE("accum7-512")
+{
+    test_accum7<accum512_holder>();
+}

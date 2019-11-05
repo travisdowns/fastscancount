@@ -74,8 +74,16 @@ struct mm512fake {
 };
 
 
+
 template <typename T>
 struct default_traits {
+
+    struct carry_sum {
+        T carry;
+        T sum;
+    };
+
+
     static T xor_(const T& l, const T& r) {
         return l ^ r;
     }
@@ -91,6 +99,21 @@ struct default_traits {
     static T not_(const T& v) {
         return ~v;
     }
+
+    /* aka half adder */
+    static carry_sum add2(T a, T b) {
+        return {and_(a, b), xor_(a, b)};
+    }
+
+    /* aka full adder */
+    static carry_sum add3(T a, T b, T c) {
+        auto xor01 = xor_(a, b);
+        return {
+            or_(and_(a, b), and_(c, xor01)), // carry
+            xor_(xor01, c) };                // sum
+    }
+
+
 
     static bool test(const T& v, size_t idx) {
         return v[idx];
@@ -244,7 +267,7 @@ inline boost::dynamic_bitset<> to_bitset(__m512i v) {
     return boost::dynamic_bitset<>(blocks, blocks + sizeof(blocks) / sizeof(blocks[0]));
 }
 
-struct m512_traits {
+struct m512_traits : default_traits<__m512i> {
     using T = __m512i;
 
     static T xor_(const T& l, const T& r) {
