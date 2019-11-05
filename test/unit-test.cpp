@@ -386,7 +386,9 @@ TEST_CASE("accum7")
     test_accum7<int_holder>();
 }
 
+#ifdef __AVX512F__
 TEST_CASE("accum7-512")
 {
     test_accum7<accum512_holder>();
 }
+#endif

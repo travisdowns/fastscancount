@@ -49,10 +49,12 @@ inline __m256i load<__m256i>(const void *p) {
     return _mm256_loadu_si256(static_cast<const __m256i *>(p));
 }
 
+#ifdef __AVX512F__
 template <>
 inline __m512i load<__m512i>(const void *p) {
     return _mm512_loadu_si512(static_cast<const __m512i *>(p));
 }
+#endif
 
 template <typename V>
 inline void store(void *p, V v);
@@ -62,10 +64,12 @@ inline void store(void *p, __m256i v) {
     _mm256_storeu_si256(static_cast<__m256i *>(p), v);
 }
 
+#ifdef __AVX512F__
 template <>
 inline void store(void *p, __m512i v) {
     _mm512_storeu_si512(p, v);
 }
+#endif
 
 template <typename V, typename T>
 inline V to_simd(const std::vector<T>& in) {

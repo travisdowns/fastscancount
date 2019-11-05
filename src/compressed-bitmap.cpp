@@ -17,7 +17,7 @@ std::string to_string(const dynbits &in) {
 
 template<std::size_t N>
 std::string to_string(const std::bitset<N> &in) {
-    std::string str = to_string(in);
+    std::string str = in.to_string();
     std::reverse(str.begin(), str.end());
     return str;
 }
