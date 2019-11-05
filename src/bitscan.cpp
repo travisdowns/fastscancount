@@ -18,6 +18,7 @@ void bitscan_avx512(const data_ptrs &, std::vector<uint32_t> &out,
     using atype = accumulator<A_BITS, __m512i, m512_traits>;
     using btype = compressed_bitmap<T>;
 
+    DBG(printf("atype::max %zu thresh: %u\n", atype::max, threshold));
     assert(atype::max >= threshold + 1u); // need to increase A_BITS if this fails
     atype accum_init(atype::max - threshold - 1);
     std::vector<atype> accums;

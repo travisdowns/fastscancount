@@ -55,6 +55,16 @@ struct compressed_bitmap {
     }
 
     /**
+     * Expand one chunk given its index and an element pointer (which will be udpated by this call).
+     */
+    // void expand(size_t idx, const T*& eptr) {
+    //         assert(idx < chunk_count);
+    //         auto mask = _load_mask16(&control);
+    //         auto data = _mm512_load_si512(eptr);
+    //         auto expanded = _mm512_maskz_expand_epi32(mask, data);
+    // }
+
+    /**
      * The size in byte of the bitmap (not counting e.g., std::vector overhead, etc).
      */
     size_t byte_size() const {
