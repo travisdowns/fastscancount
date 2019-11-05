@@ -26,7 +26,7 @@ TEST_OBJ := $(TEST_SRC:.cpp=.o)
 
 DEPS := $(patsubst %.o,%.d,$(OBJ) $(BENCH_OBJ) $(TEST_OBJ))
 
-MAKE_DEPS := Makefile local.mk*
+MAKE_DEPS := Makefile $(wildcard local.mk)
 
 CXX_RULE = $(CXX) $(CXXFLAGS) $(CXXEXTRA) -c $< -o $@ -Iinclude -Iinclude/boost
 
