@@ -15,7 +15,6 @@ void bitscan_avx512(const data_ptrs &, std::vector<uint32_t> &out,
 #ifndef __AVX512F__
     throw std::runtime_error("not compiled for AVX-512");
 #else
-    constexpr size_t A_BITS = 4;
     using btype = compressed_bitmap<T>;
     using atype = accum7<__m512i, m512_traits>;
 

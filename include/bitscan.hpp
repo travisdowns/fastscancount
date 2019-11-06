@@ -272,7 +272,7 @@ inline boost::dynamic_bitset<> to_bitset(__m512i v) {
     return boost::dynamic_bitset<>(blocks, blocks + sizeof(blocks) / sizeof(blocks[0]));
 }
 
-struct m512_traits : default_traits<__m512i> {
+struct m512_traits {
     using T = __m512i;
 
     static T xor_(const T& l, const T& r) {
@@ -302,6 +302,23 @@ struct m512_traits : default_traits<__m512i> {
 
     static bool zero(const T& v) {
         return to_bitset(v).none();
+    }
+
+    struct cs {
+        T carry, sum;
+    };
+
+    /* aka full adder */
+    static cs add3(T a, T b, T c) {
+        auto xor01 = xor_(a, b);
+        return {
+            _mm512_ternarylogic_epi32(a, b, c, 0xE8),    // carry
+            _mm512_ternarylogic_epi32(a, b, c, 0x96) };  // sum
+    }
+
+    /* aka half adder */
+    static cs add2(T a, T b) {
+        return {and_(a, b), xor_(a, b)};
     }
 };
 #endif
