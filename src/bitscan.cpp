@@ -1,3 +1,4 @@
+#include "accum7.hpp"
 #include "bitscan.hpp"
 #include "simd-support.hpp"
 
@@ -15,10 +16,9 @@ void bitscan_avx512(const data_ptrs &, std::vector<uint32_t> &out,
     throw std::runtime_error("not compiled for AVX-512");
 #else
     constexpr size_t A_BITS = 4;
-    using atype = accumulator<A_BITS, __m512i, m512_traits>;
     using btype = compressed_bitmap<T>;
+    using atype = accum7<__m512i, m512_traits>;
 
-    DBG(printf("atype::max %zu thresh: %u\n", atype::max, threshold));
     assert(atype::max >= threshold + 1u); // need to increase A_BITS if this fails
 
     const size_t chunk_count = aux_info.get_chunk_count();
@@ -47,11 +47,19 @@ void bitscan_avx512(const data_ptrs &, std::vector<uint32_t> &out,
         }
 
         for (size_t c = 0; c < chunk_count; c++) {
-            for (size_t i = 0; i < stream_count; i++) {
-                auto& bitmap = *bitmaps[i];
-                auto expanded = bitmap.expand512(c, eptrs[i]);
-                accums.at(c).accept(expanded);
-            }
+            #define UNROLL(i) auto e##i = bitmaps[i]->expand512(c, eptrs[i]);
+
+            UNROLL(0);
+            UNROLL(1);
+            UNROLL(2);
+            UNROLL(3);
+            UNROLL(4);
+            UNROLL(5);
+            UNROLL(6);
+
+            #undef UNROLL
+
+            accums.at(c).accept7(e0, e1, e2, e3, e4, e5, e6);
         }
     }
 
@@ -100,10 +108,9 @@ void bitscan_fake2(const data_ptrs &, std::vector<uint32_t> &out,
                 uint8_t threshold, const bitscan_all_aux<T>& aux_info,
                 const std::vector<uint32_t>& query)
 {
-    constexpr size_t A_BITS = 4;
     using btype = compressed_bitmap<T>;
     using ctype = typename btype::chunk_type;
-    using atype = accumulator<A_BITS, ctype, chunk_traits<T>>;
+    using atype = accum7<ctype, chunk_traits<T>>;
 
     // DBG(printf("atype::max %zu thresh: %u\n", atype::max, threshold));
     assert(atype::max >= threshold + 1u); // need to increase A_BITS if this fails
@@ -139,11 +146,19 @@ void bitscan_fake2(const data_ptrs &, std::vector<uint32_t> &out,
         }
 
         for (size_t c = 0; c < chunk_count; c++) {
-            for (size_t i = 0; i < stream_count; i++) {
-                auto& bitmap = *bitmaps[i];
-                auto expanded = bitmap.expand(c, eptrs[i]);
-                accums.at(c).accept(expanded);
-            }
+            #define UNROLL(i) auto e##i = bitmaps[i]->expand(c, eptrs[i]);
+
+            UNROLL(0);
+            UNROLL(1);
+            UNROLL(2);
+            UNROLL(3);
+            UNROLL(4);
+            UNROLL(5);
+            UNROLL(6);
+
+            #undef UNROLL
+
+            accums.at(c).accept7(e0, e1, e2, e3, e4, e5, e6);
         }
     }
 

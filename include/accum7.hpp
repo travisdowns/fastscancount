@@ -43,11 +43,6 @@ public:
     }
 
     void accept7(T v0, T v1, T v2, T v3, T v4, T v5, T v6) {
-        // std::array<T, 7> all{v0, v1, v2, v3, v4, v5, v6};
-        // for (auto e : all) {
-        //     accept(e);
-        // }
-
         auto [c0_0, s0_0] = traits::add3(v0, v1, v2);
         auto [c0_1, s0_1] = traits::add3(v3, v4, v5);
         auto [c0_2, s0_2] = traits::add3(v6, s0_0, s0_1);

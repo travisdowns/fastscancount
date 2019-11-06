@@ -38,7 +38,7 @@
 // fast params
 constexpr size_t DEMO_DOMAIN  =   200000;
 constexpr size_t DEMO_ARRAY_SIZE  = 5000;
-constexpr size_t DEMO_ARRAY_COUNT =   10;
+constexpr size_t DEMO_ARRAY_COUNT =    6;
 
 //////////////////////
 // data mode params //

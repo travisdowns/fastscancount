@@ -73,16 +73,30 @@ struct mm512fake {
     // }
 };
 
-
-
-template <typename T>
-struct default_traits {
+template <typename T, typename B>
+struct traits_base {
 
     struct carry_sum {
         T carry;
         T sum;
     };
 
+        /* aka half adder */
+    static carry_sum add2(T a, T b) {
+        return {B::and_(a, b), B::xor_(a, b)};
+    }
+
+    /* aka full adder */
+    static carry_sum add3(T a, T b, T c) {
+        auto xor01 = B::xor_(a, b);
+        return {
+            B::or_(B::and_(a, b), B::and_(c, xor01)), // carry
+            B::xor_(xor01, c) };                // sum
+    }
+};
+
+template <typename T>
+struct default_traits : traits_base<T, default_traits<T>> {
 
     static T xor_(const T& l, const T& r) {
         return l ^ r;
@@ -100,28 +114,13 @@ struct default_traits {
         return ~v;
     }
 
-    /* aka half adder */
-    static carry_sum add2(T a, T b) {
-        return {and_(a, b), xor_(a, b)};
-    }
-
-    /* aka full adder */
-    static carry_sum add3(T a, T b, T c) {
-        auto xor01 = xor_(a, b);
-        return {
-            or_(and_(a, b), and_(c, xor01)), // carry
-            xor_(xor01, c) };                // sum
-    }
-
-
-
     static bool test(const T& v, size_t idx) {
         return v[idx];
     }
 };
 
 template <typename U>
-struct chunk_traits {
+struct chunk_traits : traits_base<typename compressed_bitmap<U>::chunk_type, chunk_traits<U>> {
     using T = typename compressed_bitmap<U>::chunk_type;
 
     static T xor_(const T& l, const T& r) {
