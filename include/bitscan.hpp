@@ -61,18 +61,6 @@ void bitscan_scalar(const data_ptrs &, std::vector<uint32_t> &out,
     }
 }
 
-/** a fake __mm512i class */
-struct mm512fake {
-    std::bitset<512> bits;
-
-    mm512fake() {
-    }
-
-    // explicit mm512fake(const void* addr) {
-
-    // }
-};
-
 template <typename T, typename B>
 struct traits_base {
 
