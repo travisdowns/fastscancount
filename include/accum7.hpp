@@ -5,19 +5,17 @@
 
 using fastscancount::default_traits;
 
-template <typename T, typename traits = default_traits<T>>
-class accum7 {
-    T bits0, bits1, bits2, sat;
+template <size_t B, typename T, typename traits = default_traits<T>>
+class accum7_t {
 
-    std::array<T*, 3> as_array() {
-        return {&bits0, &bits1, &bits2};
-    }
+    std::array<T,B> bits;
+    T sat;
 
 public:
 
     static constexpr size_t max = 8;
 
-    accum7(size_t initial = 0) : bits0{}, bits1{}, bits2{}, sat{} {
+    accum7_t(size_t initial = 0) : bits{}, sat{} {
         T ones = traits::not_(T{});
         while (initial--) {
             accept(ones);
@@ -25,21 +23,13 @@ public:
     }
 
     void accept(T addend) {
-        T carry;
-
-        carry = traits::and_(bits0, addend);
-        bits0  =  traits::xor_(bits0, addend);
-        addend = carry;
-
-        carry = traits::and_(bits1, addend);
-        bits1  =  traits::xor_(bits1, addend);
-        addend = carry;
-
-        carry = traits::and_(bits2, addend);
-        bits2  =  traits::xor_(bits2, addend);
-        addend = carry;
-
-        sat = traits::or_(sat, addend);
+        T carry = addend;
+        for (size_t bit = 0; bit < B; bit++) {
+            T sum = traits::xor_(bits[bit], carry);
+            carry = traits::and_(bits[bit], carry);
+            bits[bit] = sum;
+        }
+        sat = traits::or_(sat, carry);  // update saturation
     }
 
     void accept7(T v0, T v1, T v2, T v3, T v4, T v5, T v6) {
@@ -54,20 +44,47 @@ public:
     }
 
     /**
-     * Accept v0, v1, v2 with weights 2^0, 2^1, 2^2,
+     * Propagate carry starting from position P.
+     */
+    template <size_t P, size_t S>
+    void accept_weighted2(T carry_in, const std::array<T,S>& values) {
+        if constexpr (P < B) {
+            if constexpr (P < S) {
+                auto [c, s] = traits::add3(carry_in, values[P], bits[P]);
+                bits[P] = s;
+                accept_weighted2<P+1,S>(c, values);
+            } else {
+                auto [c, s] = traits::add2(carry_in, bits[P]);
+                bits[P] = s;
+                accept_weighted2<P+1,S>(c, values);
+            }
+        } else {
+            sat = traits::or_(sat, carry_in);
+            if constexpr (P < S) {
+                sat = traits::or_(sat, values[P]);
+                accept_weighted2<P+1,S>(T{}, values);
+            }
+        }
+    }
+
+    /**
+     * Accept v0, v1, v2 with weights 2^0, 2^1, 2^2
      * respecitvely.
      */
     void accept_weighted(T v0, T v1, T v2) {
-        auto [c0, s0] = traits::add2(v0, bits0);
-        bits0 = s0;
+        static_assert(B >= 1);
 
-        auto [c1, s1] = traits::add3(c0, v1, bits1);
-        bits1 = s1;
+        auto [c0, s0] = traits::add2(v0, bits[0]);
+        bits[0] = s0;
 
-        auto [c2, s2] = traits::add3(c1, v2, bits2);
-        bits2 = s2;
+        accept_weighted2<1, 3>(c0, {v0, v1, v2});
+        // auto [c1, s1] = traits::add3(c0, v1, bits[1]);
+        // bits[1] = s1;
 
-        sat = traits::or_(sat, c2);
+        // auto [c2, s2] = traits::add3(c1, v2, bits[2]);
+        // bits[2] = s2;
+
+        // sat = traits::or_(sat, c2);
     }
 
     /**
@@ -77,11 +94,10 @@ public:
      */
     std::vector<size_t> get_sums() {
         std::vector<size_t> ret(traits::size());
-        auto bits = as_array();
         for (size_t i = 0; i < traits::size(); i++) {
             size_t multiplier = 1;
             for (size_t bit = 0; bit < bits.size(); bit++) {
-                ret[i] += traits::test(*bits[bit], i) * multiplier;
+                ret[i] += traits::test(bits[bit], i) * multiplier;
                 multiplier *= 2;
             }
             if (traits::test(sat, i)) {
@@ -95,5 +111,9 @@ public:
         return sat;
     }
 };
+
+template <typename T, typename traits = default_traits<T>>
+using accum7 = class accum7_t<3, T, traits>;
+
 
 #endif

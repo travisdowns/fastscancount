@@ -155,18 +155,6 @@ void bitscan_avx512(const data_ptrs &, std::vector<uint32_t> &out,
 #endif
 }
 
-// template <typename T = uint32_t>
-// inline std::array<T, sizeof(V) / sizeof(T)> to_vector(const boost::dynamic_bitset& in) {
-//     assert(in.size() % (sizeof(T) * 8) == 0, "T size must divide bitset.size()");
-//     std::vector<T> ret(in.size() / (sizeof(T) * 8));
-//     for (size_t e = 0; e < ret.size(); e++) {
-//         T elem = 0;
-//         for (size_t i = 0; i )
-//     }
-//     return out;
-// }
-
-
 template <typename E>
 void bitscan_fake2(const data_ptrs &, std::vector<uint32_t> &out,
                 uint8_t threshold, const bitscan_all_aux<E>& aux_info,

@@ -170,7 +170,7 @@ struct int_holder {
         return accumulator<B, int, int_traits<C>>(initial);
     }
 
-    template <size_t C>
+    template <size_t B, size_t C>
     static auto make7(size_t initial = 0) {
         return accum7<int, int_traits<C>>(initial);
     }
@@ -229,7 +229,7 @@ struct accum512_holder {
         return accum512<C, fastscancount::accumulator<B, __m512i, fastscancount::m512_traits>>(initial);
     }
 
-    template <size_t C>
+    template <size_t B, size_t C>
     static auto make7(size_t initial = 0) {
         return accum512<C, accum7<__m512i, fastscancount::m512_traits>>(initial);;
     }
@@ -252,7 +252,7 @@ void accept_n(A& a, int val, size_t n) {
 template <typename T>
 void test_accum7() {
     {
-        auto accum = T::template make7<1>();
+        auto accum = T::template make7<3, 1>();
 
         REQUIRE(accum.get_sums() == vst{0});
         accum.accept(0);
@@ -281,7 +281,7 @@ void test_accum7() {
     }
 
     {
-        auto accum = T::template make7<2>();
+        auto accum = T::template make7<3, 2>();
 
         REQUIRE(accum.get_sums() == vst{0, 0});
         accum.accept(2);
@@ -297,23 +297,23 @@ void test_accum7() {
     }
 
     {
-        auto accum = T::template make7<2>();
+        auto accum = T::template make7<3, 2>();
 
-        accum = T::template make7<2>(1);
+        accum = T::template make7<3, 2>(1);
         REQUIRE(accum.get_sums() == vst{1, 1});
 
-        accum = T::template make7<2>(2);
+        accum = T::template make7<3, 2>(2);
         REQUIRE(accum.get_sums() == vst{2, 2});
 
-        accum = T::template make7<2>(3);
+        accum = T::template make7<3, 2>(3);
         REQUIRE(accum.get_sums() == vst{3, 3});
 
-        accum = T::template make7<2>(10);
+        accum = T::template make7<3, 2>(10);
         REQUIRE(accum.get_sums() == vst{8, 8});
     }
 
     {
-        auto accum = T::template make7<2>();
+        auto accum = T::template make7<3, 2>();
 
         REQUIRE(accum.get_saturated() == 0b00);
 
@@ -338,7 +338,7 @@ void test_accum7() {
     std::bernoulli_distribution d(0.5);
 
     for (int iter = 0; iter < 10; iter++) {
-        auto accum = T::template make7<2>();
+        auto accum = T::template make7<3, 2>();
         size_t sum0 = 0, sum1 = 0;
         for (int inner = 0; inner < 20; inner++) {
 
@@ -355,7 +355,7 @@ void test_accum7() {
     }
 
     for (int iter = 0; iter < 10; iter++) {
-        auto accum = T::template make7<2>();
+        auto accum = T::template make7<3, 2>();
         size_t sum0 = 0, sum1 = 0;
         for (int inner = 0; inner < 20; inner++) {
 
