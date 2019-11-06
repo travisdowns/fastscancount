@@ -69,7 +69,7 @@ struct compressed_bitmap {
         auto mask = _load_mask16(const_cast<control_type *>(control.data()) + idx);
         auto data = _mm512_loadu_si512(eptr);
         auto expanded = _mm512_maskz_expand_epi32(mask, data);
-        eptr += __builtin_popcount(mask);
+        eptr += __builtin_popcountl(mask);
         return expanded;
     }
 #endif
