@@ -1,6 +1,7 @@
 #ifndef BITSCAN_H_
 #define BITSCAN_H_
 
+#include "accum7.hpp"
 #include "compressed-bitmap.hpp"
 #include "common.h"
 #include "hedley.h"
@@ -61,52 +62,6 @@ void bitscan_scalar(const data_ptrs &, std::vector<uint32_t> &out,
     }
 }
 
-template <typename T, typename B>
-struct traits_base {
-
-    struct carry_sum {
-        T carry;
-        T sum;
-    };
-
-        /* aka half adder */
-    static carry_sum add2(T a, T b) {
-        return {B::and_(a, b), B::xor_(a, b)};
-    }
-
-    /* aka full adder */
-    static carry_sum add3(T a, T b, T c) {
-        auto xor01 = B::xor_(a, b);
-        return {
-            B::or_(B::and_(a, b), B::and_(c, xor01)), // carry
-            B::xor_(xor01, c) };                // sum
-    }
-};
-
-template <typename T>
-struct default_traits : traits_base<T, default_traits<T>> {
-
-    static T xor_(const T& l, const T& r) {
-        return l ^ r;
-    }
-
-    static T and_(const T& l, const T& r) {
-        return l & r;
-    }
-
-    static T or_(const T& l, const T& r) {
-        return l | r;
-    }
-
-    static T not_(const T& v) {
-        return ~v;
-    }
-
-    static bool test(const T& v, size_t idx) {
-        return v[idx];
-    }
-};
-
 template <typename U>
 struct chunk_traits : traits_base<typename compressed_bitmap<U>::chunk_type, chunk_traits<U>> {
     using T = typename compressed_bitmap<U>::chunk_type;
@@ -148,61 +103,6 @@ struct chunk_traits : traits_base<typename compressed_bitmap<U>::chunk_type, chu
     }
 };
 
-
-
-/**
- * Accumulator that can accumulate per-bit sums up to B bits. When a
- * value reaches the max of 2^B, it saturates.
- */
-template <size_t B, typename T, typename traits = default_traits<T>>
-class accumulator {
-    T bits[B + 1]; // the last element is set for saturation
-
-public:
-    static constexpr size_t max = ((size_t)1) << B;
-
-    accumulator(size_t initial = 0) : bits{} {
-        T ones = traits::not_(T{});
-        while (initial--) {
-            accept(ones);
-        }
-    }
-
-    void accept(const T& addend) {
-        T carry = addend;
-        for (size_t bit = 0; bit < B; bit++) {
-            T sum = traits::xor_(bits[bit], carry);
-            carry = traits::and_(bits[bit], carry);
-            bits[bit] = sum;
-        }
-        bits[B] = traits::or_(bits[B], carry);  // update saturation
-    }
-
-    /**
-     * A vector with one element per vertical counter containing its sum.
-     *
-     * This method is very slow and is intended primarily for writing tests.
-     */
-    std::vector<size_t> get_sums() {
-        std::vector<size_t> ret(traits::size());
-        for (size_t i = 0; i < traits::size(); i++) {
-            size_t multiplier = 1;
-            for (size_t bit = 0; bit < B; bit++) {
-                ret[i] += traits::test(bits[bit], i) * multiplier;
-                multiplier *= 2;
-            }
-            if (traits::test(bits[B], i)) {
-                ret[i] = max; // saturation
-            }
-        }
-        return ret;
-    }
-
-    T get_saturated() {
-        return bits[B];
-    }
-
-};
 
 
 /** basic SIMD algorithm, but fake */

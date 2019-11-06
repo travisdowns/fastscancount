@@ -1,21 +1,73 @@
 #ifndef ACCUM7_H_
 #define ACCUM7_H_
 
-#include "bitscan.hpp"
+#include "compressed-bitmap.hpp"
 
-using fastscancount::default_traits;
+#include <array>
+#include <vector>
 
-template <size_t B, typename T, typename traits = default_traits<T>>
-class accum7_t {
+namespace fastscancount {
+
+template <typename T, typename B>
+struct traits_base {
+
+    struct carry_sum {
+        T carry;
+        T sum;
+    };
+
+        /* aka half adder */
+    static carry_sum add2(T a, T b) {
+        return {B::and_(a, b), B::xor_(a, b)};
+    }
+
+    /* aka full adder */
+    static carry_sum add3(T a, T b, T c) {
+        auto xor01 = B::xor_(a, b);
+        return {
+            B::or_(B::and_(a, b), B::and_(c, xor01)), // carry
+            B::xor_(xor01, c) };                // sum
+    }
+};
+
+template <typename T>
+struct default_traits : traits_base<T, default_traits<T>> {
+
+    static T xor_(const T& l, const T& r) {
+        return l ^ r;
+    }
+
+    static T and_(const T& l, const T& r) {
+        return l & r;
+    }
+
+    static T or_(const T& l, const T& r) {
+        return l | r;
+    }
+
+    static T not_(const T& v) {
+        return ~v;
+    }
+
+    static bool test(const T& v, size_t idx) {
+        return v[idx];
+    }
+};
+
+/**
+ * Accumulator that can accumulate per-bit sums up to B bits. When a
+ * value reaches the max of 2^B, it saturates.
+ */
+template <size_t B, typename T, typename traits>
+class accumulator {
 
     std::array<T,B> bits;
     T sat;
 
 public:
+    static constexpr size_t max = (size_t)1 << B;
 
-    static constexpr size_t max = 8;
-
-    accum7_t(size_t initial = 0) : bits{}, sat{} {
+    accumulator(size_t initial = 0) : bits{}, sat{} {
         T ones = traits::not_(T{});
         while (initial--) {
             accept(ones);
@@ -78,13 +130,6 @@ public:
         bits[0] = s0;
 
         accept_weighted2<1, 3>(c0, {v0, v1, v2});
-        // auto [c1, s1] = traits::add3(c0, v1, bits[1]);
-        // bits[1] = s1;
-
-        // auto [c2, s2] = traits::add3(c1, v2, bits[2]);
-        // bits[2] = s2;
-
-        // sat = traits::or_(sat, c2);
     }
 
     /**
@@ -113,7 +158,8 @@ public:
 };
 
 template <typename T, typename traits = default_traits<T>>
-using accum7 = class accum7_t<3, T, traits>;
+using accum7 = class accumulator<3, T, traits>;
 
+}
 
 #endif
