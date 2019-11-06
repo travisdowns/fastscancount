@@ -6,6 +6,100 @@
 
 namespace fastscancount {
 
+using query_type = std::vector<uint32_t>;
+using out_type = std::vector<uint32_t>;
+
+
+/*
+ * The element type of the underlying bitmap.
+ */
+template <typename E>
+struct fake_traits {
+    using elem_type = E;
+    using aux_type = bitscan_all_aux<E>;
+};
+
+
+template <typename traits>
+void bitscan_generic(out_type& out,
+                     uint8_t threshold,
+                     const typename traits::aux_type& aux_info,
+                     const std::vector<uint32_t>& query)
+{
+    using T = typename traits::elem_type;
+    using btype = compressed_bitmap<T>;
+    using atype = accum7<__m512i, m512_traits>;
+
+    assert(atype::max >= threshold + 1u); // need to increase A_BITS if this fails
+
+    const size_t chunk_count = aux_info.get_chunk_count();
+
+    atype accum_init(atype::max - threshold - 1);
+    std::vector<atype> accums;
+    accums.resize(chunk_count, accum_init);
+
+    // first we take queries in chunks of 7
+    constexpr size_t stream_count = 7;
+    size_t qidx = 0;
+    for (; qidx + stream_count <= query.size();) {
+        assert(qidx < query.size());
+        auto didx = query.at(qidx);
+
+        std::array<const compressed_bitmap<T>*, stream_count> bitmaps;
+        std::array<const T*, stream_count> eptrs;
+        bitmaps.fill(nullptr);
+
+        for (size_t i = 0; i < stream_count; i++) {
+            auto did = query.at(qidx++);
+            auto& bitmap = aux_info.bitmaps.at(did);
+            bitmaps[i] = &bitmap;
+            eptrs[i] = bitmap.elements.data();
+            assert(bitmaps[i]->chunk_count() == chunk_count);
+        }
+
+        for (size_t c = 0; c < chunk_count; c++) {
+            #define UNROLL(i) auto e##i = bitmaps[i]->expand512(c, eptrs[i]);
+
+            UNROLL(0);
+            UNROLL(1);
+            UNROLL(2);
+            UNROLL(3);
+            UNROLL(4);
+            UNROLL(5);
+            UNROLL(6);
+
+            #undef UNROLL
+
+            accums.at(c).accept7(e0, e1, e2, e3, e4, e5, e6);
+        }
+    }
+
+    // remaining queries one-by-one
+    for (; qidx < query.size(); qidx++) {
+        auto& bitmap = aux_info.bitmaps.at(query.at(qidx));
+        const T *eptr = bitmap.elements.data();
+        for (size_t c = 0; c < chunk_count; c++) {
+            auto expanded = bitmap.expand512(c, eptr);
+            accums.at(c).accept(expanded);
+        }
+    }
+
+    size_t offset = 0;
+    for (auto& accum : accums) {
+        __m512i flags = accum.get_saturated();
+        auto flags64 = to_array<uint64_t>(flags);
+        assert(flags64.size() * 64 == btype::chunk_bits);
+        for (auto f : flags64) {
+            while (f) {
+                uint32_t idx = __builtin_ctzl(f);
+                out.push_back(idx + offset);
+                f &= (f - 1);
+            }
+            offset += 64;
+        }
+    }
+}
+
 
 template <typename T>
 void bitscan_avx512(const data_ptrs &, std::vector<uint32_t> &out,
@@ -117,11 +211,6 @@ void bitscan_fake2(const data_ptrs &, std::vector<uint32_t> &out,
     const size_t chunk_count = aux_info.get_chunk_count();
 
     atype accum_init(atype::max - threshold - 1);
-    // printf("init : ");
-    // for (auto s : accum_init.get_sums()) {
-    //     printf("%zu ", s);
-    // }
-    // printf("\n");
     std::vector<atype> accums;
     accums.resize(chunk_count, accum_init);
 
@@ -173,10 +262,6 @@ void bitscan_fake2(const data_ptrs &, std::vector<uint32_t> &out,
 
     size_t offset = 0;
     for (auto& accum : accums) {
-        // for (auto s : accum.get_sums()) {
-        //     printf("%zu ", s);
-        // }
-        // printf("\n");
         auto flags = accum.get_saturated();
         // printf("sat had %zu bits\n", flags.count());
         for (size_t i = 0; i < btype::chunk_bits; i++) {
