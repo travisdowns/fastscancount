@@ -134,8 +134,6 @@ void scancount(const std::vector<const std::vector<uint32_t>*> &data,
 }
 }
 
-using fastscancount::scancount;
-
 void calc_boundaries(uint32_t largest, uint32_t range_size,
                     const std::vector<uint32_t>& data,
                     std::vector<uint32_t>& range_ends) {
@@ -172,7 +170,7 @@ template <typename F>
 void test(F f, const std::vector<const std::vector<uint32_t>*>& data_ptrs,
           std::vector<uint32_t>& answer, unsigned threshold, const std::string &name) {
   answer.clear();
-  fastscancount::scancount(data_ptrs, answer, threshold);
+  fastscancount::fastscancount(data_ptrs, answer, threshold);
   size_t s1 = answer.size();
   auto a1 (answer);
   std::sort(a1.begin(), a1.end());

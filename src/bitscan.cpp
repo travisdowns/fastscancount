@@ -100,7 +100,8 @@ void bitscan_generic(out_type& out,
 
         for (size_t i = 0; i < stream_count; i++) {
             auto did = query.at(qidx++);
-            auto& bitmap = aux_info.bitmaps.at(did);
+            assert(did < aux_info.bitmaps.size());
+            auto& bitmap = aux_info.bitmaps[did];
             bitmaps[i] = &bitmap;
             eptrs[i] = bitmap.elements.data();
             assert(bitmaps[i]->chunk_count() == chunk_count);
@@ -119,7 +120,8 @@ void bitscan_generic(out_type& out,
 
             #undef UNROLL
 
-            accums.at(c).accept7(e0, e1, e2, e3, e4, e5, e6);
+            assert(c < accums.size());
+            accums[c].accept7(e0, e1, e2, e3, e4, e5, e6);
         }
     }
 
