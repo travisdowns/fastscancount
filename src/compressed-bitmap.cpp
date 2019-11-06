@@ -30,6 +30,37 @@ dynbits subset(const dynbits& in, size_t from, size_t to) {
     return ret;
 }
 
+template <typename T>
+inline size_t tzcnt(T val) {
+    assert(val);
+    static_assert(sizeof(T) <= sizeof(unsigned long));
+    return __builtin_ctzl(val);
+}
+
+template <typename T>
+typename compressed_bitmap<T>::chunk_type compressed_bitmap<T>::expand(size_t idx, const T*& eptr) const {
+    assert(idx < chunk_count());
+    assert(eptr >= elements.data());
+    assert(eptr <= elements.data() + elements.size());
+    chunk_type chunk;
+    auto c = control.at(idx);
+    while (c) {
+        assert(eptr < elements.data() + elements.size());
+        auto subchunk_idx = tzcnt(c & -c) * subchunk_bits;
+        assert(subchunk_idx < chunk_bits);
+        auto elem = *eptr++;
+        assert(elem); // zero element doens't make sense
+        while (elem) {
+            auto elem_idx = tzcnt(elem);
+            assert(subchunk_idx + elem_idx < chunk_bits);
+            chunk.set(subchunk_idx + elem_idx);
+            elem &= elem - 1; // clear lowest set bit
+        }
+        c &= c - 1; // clear lowest set bit
+    }
+    return chunk;
+}
+
 
 /**
  * T the type of the output data entries, either uint32_t or uint8_t I guess
@@ -88,26 +119,6 @@ compressed_bitmap<T>::compressed_bitmap(const std::vector<uint32_t>& array, uint
     assert(elements.size() <= array.size());
     assert(control.size() == div_up((size_t)(largest + 1), chunk_bits) );
     DBG(printf("arr size: %zu control size: %zu elem size %zu\n", array.size(), control.size(), elements.size()));
-}
-
-template <typename T>
-inline size_t tzcnt(T val) {
-    assert(val);
-    return __builtin_ctzl(val);
-}
-
-/**
- * Count the leading zeros in a bitset.
- */
-template <size_t N>
-size_t clz(const std::bitset<N>& bs) {
-    size_t zeros = 0;
-    for (size_t i = 0; i < bs.size(); i++) {
-        if (bs[i]) {
-            return i;
-        }
-    }
-    return bs.size();
 }
 
 template <typename T>

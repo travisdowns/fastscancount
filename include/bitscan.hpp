@@ -144,7 +144,7 @@ struct chunk_traits {
 
     static T not_(const T& v) {
         T ret(v);
-        ~ret;
+        ret.flip();;
         return ret;
     }
 
@@ -235,6 +235,7 @@ void bitscan_fake(const data_ptrs &, std::vector<uint32_t> &out,
         auto chunks = bitmap.chunks();
         assert(chunks.size() == aux_info.get_chunk_count());
         for (size_t c = 0; c < chunks.size(); c++) {
+            // printf("expanded had %zu bits\n", chunks[c].count());
             accums.at(c).accept(chunks.at(c));
         }
     }
@@ -251,13 +252,18 @@ void bitscan_fake(const data_ptrs &, std::vector<uint32_t> &out,
     }
 }
 
-/** basic SIMD algorithm, but fake */
+template <typename T>
+void bitscan_fake2(const data_ptrs &, std::vector<uint32_t> &out,
+                uint8_t threshold, const bitscan_all_aux<T>& aux_info,
+                const std::vector<uint32_t>& query);
+
+#ifdef __AVX512F__
+
 template <typename T>
 void bitscan_avx512(const data_ptrs &, std::vector<uint32_t> &out,
                 uint8_t threshold, const bitscan_all_aux<T>& aux_info,
                 const std::vector<uint32_t>& query);
 
-#ifdef __AVX512F__
 
 inline boost::dynamic_bitset<> to_bitset(__m512i v) {
     using block_type = boost::dynamic_bitset<>::block_type;

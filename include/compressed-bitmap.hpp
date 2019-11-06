@@ -3,9 +3,11 @@
 
 #include "boost/dynamic_bitset.hpp"
 
+#include <immintrin.h>
 #include <inttypes.h>
 #include <vector>
 #include <bitset>
+
 
 
 template <typename T> struct control_for {};
@@ -54,15 +56,23 @@ struct compressed_bitmap {
         return control.size();
     }
 
+    chunk_type expand(size_t idx, const T*& eptr) const;
+
+#ifdef __AVX512F__
     /**
      * Expand one chunk given its index and an element pointer (which will be udpated by this call).
      */
-    // void expand(size_t idx, const T*& eptr) {
-    //         assert(idx < chunk_count);
-    //         auto mask = _load_mask16(&control);
-    //         auto data = _mm512_load_si512(eptr);
-    //         auto expanded = _mm512_maskz_expand_epi32(mask, data);
-    // }
+    __m512i expand512(size_t idx, const T*& eptr) const {
+        assert(idx < chunk_count());
+        assert(eptr >= elements.data());
+        assert(eptr < elements.data() + elements.size());
+        auto mask = _load_mask16(const_cast<control_type *>(control.data()) + idx);
+        auto data = _mm512_loadu_si512(eptr);
+        auto expanded = _mm512_maskz_expand_epi32(mask, data);
+        eptr += __builtin_popcount(mask);
+        return expanded;
+    }
+#endif
 
     /**
      * The size in byte of the bitmap (not counting e.g., std::vector overhead, etc).
