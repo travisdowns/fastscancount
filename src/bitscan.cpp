@@ -30,24 +30,26 @@ void bitscan_avx512(const data_ptrs &, std::vector<uint32_t> &out,
     // first we take queries in chunks of 7
     constexpr size_t stream_count = 7;
     size_t qidx = 0;
-    while (qidx + stream_count <= query.size()) {
+    for (; qidx + stream_count <= query.size();) {
         assert(qidx < query.size());
         auto didx = query.at(qidx);
 
         std::array<const compressed_bitmap<T>*, stream_count> bitmaps;
+        std::array<const T*, stream_count> eptrs;
         bitmaps.fill(nullptr);
 
-        for (auto& bitmap_ptr : bitmaps) {
+        for (size_t i = 0; i < stream_count; i++) {
             auto did = query.at(qidx++);
-            bitmap_ptr = &aux_info.bitmaps.at(did);
-            assert(bitmap_ptr->chunk_count() == chunk_count);
+            auto& bitmap = aux_info.bitmaps.at(did);
+            bitmaps[i] = &bitmap;
+            eptrs[i] = bitmap.elements.data();
+            assert(bitmaps[i]->chunk_count() == chunk_count);
         }
 
-        for (auto bitmap_ptr : bitmaps) {
-            auto& bitmap = *bitmap_ptr;
-            const T *eptr = bitmap.elements.data();
-            for (size_t c = 0; c < chunk_count; c++) {
-                auto expanded = bitmap.expand512(c, eptr);
+        for (size_t c = 0; c < chunk_count; c++) {
+            for (size_t i = 0; i < stream_count; i++) {
+                auto& bitmap = *bitmaps[i];
+                auto expanded = bitmap.expand512(c, eptrs[i]);
                 accums.at(c).accept(expanded);
             }
         }
@@ -125,19 +127,21 @@ void bitscan_fake2(const data_ptrs &, std::vector<uint32_t> &out,
         auto didx = query.at(qidx);
 
         std::array<const compressed_bitmap<T>*, stream_count> bitmaps;
+        std::array<const T*, stream_count> eptrs;
         bitmaps.fill(nullptr);
 
-        for (auto& bitmap_ptr : bitmaps) {
+        for (size_t i = 0; i < stream_count; i++) {
             auto did = query.at(qidx++);
-            bitmap_ptr = &aux_info.bitmaps.at(did);
-            assert(bitmap_ptr->chunk_count() == chunk_count);
+            auto& bitmap = aux_info.bitmaps.at(did);
+            bitmaps[i] = &bitmap;
+            eptrs[i] = bitmap.elements.data();
+            assert(bitmaps[i]->chunk_count() == chunk_count);
         }
 
-        for (auto bitmap_ptr : bitmaps) {
-            auto& bitmap = *bitmap_ptr;
-            const T *eptr = bitmap.elements.data();
-            for (size_t c = 0; c < chunk_count; c++) {
-                auto expanded = bitmap.expand(c, eptr);
+        for (size_t c = 0; c < chunk_count; c++) {
+            for (size_t i = 0; i < stream_count; i++) {
+                auto& bitmap = *bitmaps[i];
+                auto expanded = bitmap.expand(c, eptrs[i]);
                 accums.at(c).accept(expanded);
             }
         }
