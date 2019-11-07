@@ -87,6 +87,20 @@ void generic_populate_hits(std::vector<A>& accums,
     }
 }
 
+template <size_t N, typename traits, typename A>
+void handle_tail(size_t qidx, A& accums, const typename traits::aux_type& aux_info, const query_type& query) {
+    size_t chunk_count = aux_info.get_chunk_count();
+    for (; qidx < query.size(); qidx++) {
+        auto& bitmap = aux_info.bitmaps.at(query.at(qidx));
+        const typename traits::elem_type *eptr = bitmap.elements.data();
+        for (size_t c = 0; c < chunk_count; c++) {
+            auto expanded = traits::expand(bitmap, c, eptr);
+            assert(c < accums.size());
+            accums[c].accept(expanded);
+        }
+    }
+}
+
 template <size_t THRESHOLD, typename traits>
 void bitscan_generic(out_type& out,
                      const typename traits::aux_type& aux_info,
@@ -141,15 +155,7 @@ void bitscan_generic(out_type& out,
         }
     }
 
-    // remaining queries one-by-one
-    for (; qidx < query.size(); qidx++) {
-        auto& bitmap = aux_info.bitmaps.at(query.at(qidx));
-        const T *eptr = bitmap.elements.data();
-        for (size_t c = 0; c < chunk_count; c++) {
-            auto expanded = traits::expand(bitmap, c, eptr);
-            accums.at(c).accept(expanded);
-        }
-    }
+    handle_tail<0, traits>(qidx, accums, aux_info, query);
 
     generic_populate_hits<traits>(accums, out);
 }
