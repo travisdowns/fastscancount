@@ -77,8 +77,7 @@ struct avx512_traits : base_traits<E, avx512_traits<E>> {
 
 template <typename traits, typename A>
 HEDLEY_NEVER_INLINE
-void generic_populate_hits(std::vector<A>& accums,
-                           out_type& out) {
+void generic_populate_hits(std::vector<A>& accums, out_type& out) {
     size_t offset = 0;
     for (auto& accum : accums) {
         auto satflags = accum.get_saturated();
