@@ -89,6 +89,17 @@ void generic_populate_hits(std::vector<A>& accums,
 
 template <size_t N, typename traits, typename A>
 void handle_tail(size_t qidx, A& accums, const typename traits::aux_type& aux_info, const query_type& query) {
+    std::array<const typename traits::btype*, N> bitmaps;
+    std::array<const typename traits::elem_type*, N> eptrs;
+    for (size_t i = qidx; i < query.size(); i++) {
+        auto did = query.at(i);
+        assert(did < aux_info.bitmaps.size());
+        auto& bitmap = aux_info.bitmaps[did];
+        bitmaps[i] = &bitmap;
+        eptrs[i] = bitmap.elements.data();
+        assert(bitmaps[i]->chunk_count() == chunk_count);
+    }
+
     size_t chunk_count = aux_info.get_chunk_count();
     for (; qidx < query.size(); qidx++) {
         auto& bitmap = aux_info.bitmaps.at(query.at(qidx));
