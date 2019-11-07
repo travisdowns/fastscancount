@@ -10,26 +10,33 @@ using query_type = std::vector<uint32_t>;
 using out_type = std::vector<uint32_t>;
 
 
+template <typename E, typename D>
+struct base_traits {
+    using elem_type = E;
+    using aux_type = bitscan_all_aux<E>;
+    using btype = compressed_bitmap<E>;
+
+    static constexpr size_t chunk_bits = btype::chunk_bits;
+};
+
 /*
  * The element type of the underlying bitmap.
  */
 template <typename E>
-struct fake_traits {
-    using elem_type = E;
-    using aux_type = bitscan_all_aux<E>;
-    using btype = compressed_bitmap<E>;
-    using chunk_type = typename btype::chunk_type;
-    using accum_type = accum7<chunk_type, chunk_traits<E>>;
+struct fake_traits : base_traits<E, fake_traits<E>> {
+    using base = base_traits<E, fake_traits<E>>;
+    using chunk_type = typename base::btype::chunk_type;
 
-    static constexpr size_t chunk_bits = btype::chunk_bits;
+    template <size_t B>
+    using accum_type = accumulator<B, chunk_type, chunk_traits<E>>;
 
-    static chunk_type expand(const btype& bitmap, size_t index, const E*& eptr) {
+    static chunk_type expand(const typename base::btype& bitmap, size_t index, const E*& eptr) {
         return bitmap.expand(index, eptr);
     }
 
     static void populate_hits(const chunk_type& flags, uint32_t offset, out_type& out) {
             // printf("sat had %zu bits\n", flags.count());
-        for (size_t i = 0; i < btype::chunk_bits; i++) {
+        for (size_t i = 0; i < base::chunk_bits; i++) {
             if (flags.test(i)) {
                 out.push_back(offset + i);
             }
@@ -40,22 +47,20 @@ struct fake_traits {
 #ifdef __AVX512F__
 
 template <typename E>
-struct avx512_traits {
-    using elem_type = E;
-    using aux_type = bitscan_all_aux<E>;
-    using btype = compressed_bitmap<E>;
+struct avx512_traits : base_traits<E, avx512_traits<E>> {
+    using base = base_traits<E, avx512_traits<E>>;
     using chunk_type = __m512i;
-    using accum_type = accum7<chunk_type, m512_traits>;
 
-    static constexpr size_t chunk_bits = 512;
+    template <size_t B>
+    using accum_type = accumulator<B, chunk_type, m512_traits>;
 
-    static chunk_type expand(const btype& bitmap, size_t index, const E*& eptr) {
+    static chunk_type expand(const typename base::btype& bitmap, size_t index, const E*& eptr) {
         return bitmap.expand512(index, eptr);
     }
 
     static void populate_hits(const chunk_type& flags, uint32_t offset, out_type& out) {
         auto flags64 = to_array<uint64_t>(flags);
-        assert(flags64.size() * 64 == btype::chunk_bits);
+        assert(flags64.size() * 64 == base::chunk_bits);
         for (auto f : flags64) {
             while (f) {
                 uint32_t idx = __builtin_ctzl(f);
@@ -69,8 +74,8 @@ struct avx512_traits {
 
 #endif
 
-template <typename traits>
-void generic_populate_hits(std::vector<typename traits::accum_type>& accums,
+template <typename traits, typename A>
+void generic_populate_hits(std::vector<A>& accums,
                            out_type& out) {
     size_t offset = 0;
     for (auto& accum : accums) {
@@ -86,7 +91,7 @@ void bitscan_generic(out_type& out,
                      const std::vector<uint32_t>& query)
 {
     using T = typename traits::elem_type;
-    using atype = typename traits::accum_type;
+    using atype = typename traits::template accum_type<lg2_up(THRESHOLD + 1)>;
 
     assert(atype::max >= THRESHOLD + 1u); // need to increase A_BITS if this fails
 
@@ -171,7 +176,6 @@ constexpr std::array<bitscan_fn<traits> *, MAX> make_lut() {
 
 static constexpr size_t MAX_T = 11;
 
-
 template <typename traits>
 struct lut_holder {
     static constexpr std::array<bitscan_fn<traits> *, MAX_T> lut = make_lut<traits, MAX_T>();
@@ -185,6 +189,7 @@ void bitscan_avx512(const data_ptrs &, std::vector<uint32_t> &out,
 #ifndef __AVX512F__
     throw std::runtime_error("not compiled for AVX-512");
 #else
+    if (threshold >= MAX_T) throw std::runtime_error("MAX_T too small");
     lut_holder<avx512_traits<E>>::lut[threshold](out, aux_info, query);
 #endif
 }
@@ -194,6 +199,7 @@ void bitscan_fake2(const data_ptrs &, std::vector<uint32_t> &out,
                    uint8_t threshold, const bitscan_all_aux<E>& aux_info,
                    const std::vector<uint32_t>& query)
 {
+    if (threshold >= MAX_T) throw std::runtime_error("MAX_T too small");
     lut_holder<fake_traits<E>>::lut[threshold](out, aux_info, query);
 }
 

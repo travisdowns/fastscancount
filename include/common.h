@@ -26,6 +26,20 @@ inline T div_up(T p, T q) {
   return (p + q - 1) / q;
 }
 
+constexpr size_t lg2(size_t n) {
+    assert(n > 0);
+    if (n > 1) {
+        return 1 + lg2(n / 2);
+    } else {
+        return 0;
+    }
+}
+
+constexpr size_t lg2_up(size_t n) {
+  assert(n > 0);
+  return n == 1 ? 0 : lg2(n - 1) + 1;
+}
+
 static inline uint32_t get_largest(const std::vector<std::vector<uint32_t>>& data) {
   uint32_t largest = 0;
   for (auto& v : data) {

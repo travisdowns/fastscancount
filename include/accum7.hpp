@@ -157,9 +157,6 @@ public:
     }
 };
 
-template <typename T, typename traits = default_traits<T>>
-using accum7 = class accumulator<3, T, traits>;
-
 }
 
 #endif

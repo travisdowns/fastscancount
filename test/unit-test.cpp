@@ -169,11 +169,6 @@ struct int_holder {
     static auto make(size_t initial = 0) {
         return accumulator<B, int, int_traits<C>>(initial);
     }
-
-    template <size_t B, size_t C>
-    static auto make7(size_t initial = 0) {
-        return accum7<int, int_traits<C>>(initial);
-    }
 };
 
 TEST_CASE("accumulator") {
@@ -228,12 +223,6 @@ struct accum512_holder {
     static auto make(size_t initial = 0) {
         return accum512<C, fastscancount::accumulator<B, __m512i, fastscancount::m512_traits>>(initial);
     }
-
-    template <size_t B, size_t C>
-    static auto make7(size_t initial = 0) {
-        return accum512<C, accum7<__m512i, fastscancount::m512_traits>>(initial);;
-    }
-
 };
 
 
@@ -249,10 +238,58 @@ void accept_n(A& a, int val, size_t n) {
     }
 }
 
+template <typename T, size_t B>
+void test_many_b() {
+    std::mt19937_64 gen(0x12345678);
+    std::bernoulli_distribution d(0.5);
+
+    for (int iter = 0; iter < 10; iter++) {
+        auto accum = T::template make<3, 2>();
+        size_t sum0 = 0, sum1 = 0;
+        for (int inner = 0; inner < 20; inner++) {
+
+            REQUIRE(accum.get_sums() == vst{sum0, sum1});
+
+            int add0 = d(gen);
+            int add1 = d(gen);
+
+            accum.accept(add0 | (add1 << 1));
+
+            sum0 = std::min(accum.max, sum0 + add0);
+            sum1 = std::min(accum.max, sum1 + add1);
+        }
+    }
+
+    for (int iter = 0; iter < 10; iter++) {
+        auto accum = T::template make<3, 2>();
+        size_t sum0 = 0, sum1 = 0;
+        for (int inner = 0; inner < 20; inner++) {
+
+            REQUIRE(accum.get_sums() == vst{sum0, sum1});
+
+            bool is_sum1 = d(gen);
+
+            int add0 = d(gen) << is_sum1;
+            int add1 = d(gen) << is_sum1;
+            int add2 = d(gen) << is_sum1;
+            int add3 = d(gen) << is_sum1;
+            int add4 = d(gen) << is_sum1;
+            int add5 = d(gen) << is_sum1;
+            int add6 = d(gen) << is_sum1;
+
+            accum.accept7(add0, add1, add2, add3, add4, add5, add6);
+
+            auto& sum = is_sum1 ? sum1 : sum0;
+            sum = std::min(accum.max,
+                    sum + (add0 + add1 + add2 + add3 + add4 + add5 + add6 >> (is_sum1 ? 1 : 0)));
+        }
+    }
+}
+
 template <typename T>
 void test_accum7() {
     {
-        auto accum = T::template make7<3, 1>();
+        auto accum = T::template make<3, 1>();
 
         REQUIRE(accum.get_sums() == vst{0});
         accum.accept(0);
@@ -281,7 +318,7 @@ void test_accum7() {
     }
 
     {
-        auto accum = T::template make7<3, 2>();
+        auto accum = T::template make<3, 2>();
 
         REQUIRE(accum.get_sums() == vst{0, 0});
         accum.accept(2);
@@ -297,23 +334,23 @@ void test_accum7() {
     }
 
     {
-        auto accum = T::template make7<3, 2>();
+        auto accum = T::template make<3, 2>();
 
-        accum = T::template make7<3, 2>(1);
+        accum = T::template make<3, 2>(1);
         REQUIRE(accum.get_sums() == vst{1, 1});
 
-        accum = T::template make7<3, 2>(2);
+        accum = T::template make<3, 2>(2);
         REQUIRE(accum.get_sums() == vst{2, 2});
 
-        accum = T::template make7<3, 2>(3);
+        accum = T::template make<3, 2>(3);
         REQUIRE(accum.get_sums() == vst{3, 3});
 
-        accum = T::template make7<3, 2>(10);
+        accum = T::template make<3, 2>(10);
         REQUIRE(accum.get_sums() == vst{8, 8});
     }
 
     {
-        auto accum = T::template make7<3, 2>();
+        auto accum = T::template make<3, 2>();
 
         REQUIRE(accum.get_saturated() == 0b00);
 
@@ -334,56 +371,34 @@ void test_accum7() {
         REQUIRE(accum.get_saturated() == 0b11);
     }
 
-    std::mt19937_64 gen(0x12345678);
-    std::bernoulli_distribution d(0.5);
-
-    for (int iter = 0; iter < 10; iter++) {
-        auto accum = T::template make7<3, 2>();
-        size_t sum0 = 0, sum1 = 0;
-        for (int inner = 0; inner < 20; inner++) {
-
-            REQUIRE(accum.get_sums() == vst{sum0, sum1});
-
-            int add0 = d(gen);
-            int add1 = d(gen);
-
-            accum.accept(add0 | (add1 << 1));
-
-            sum0 = std::min(accum.max, sum0 + add0);
-            sum1 = std::min(accum.max, sum1 + add1);
-        }
-    }
-
-    for (int iter = 0; iter < 10; iter++) {
-        auto accum = T::template make7<3, 2>();
-        size_t sum0 = 0, sum1 = 0;
-        for (int inner = 0; inner < 20; inner++) {
-
-            REQUIRE(accum.get_sums() == vst{sum0, sum1});
-
-            bool is_sum1 = d(gen);
-
-            int add0 = d(gen) << is_sum1;
-            int add1 = d(gen) << is_sum1;
-            int add2 = d(gen) << is_sum1;
-            int add3 = d(gen) << is_sum1;
-            int add4 = d(gen) << is_sum1;
-            int add5 = d(gen) << is_sum1;
-            int add6 = d(gen) << is_sum1;
-
-            accum.accept7(add0, add1, add2, add3, add4, add5, add6);
-
-            auto& sum = is_sum1 ? sum1 : sum0;
-            sum = std::min(accum.max,
-                    sum + (add0 + add1 + add2 + add3 + add4 + add5 + add6 >> (is_sum1 ? 1 : 0)));
-        }
-    }
-
+    test_many_b<T, 1>();
+    test_many_b<T, 2>();
+    test_many_b<T, 3>();
+    test_many_b<T, 4>();
+    test_many_b<T, 5>();
 }
 
 TEST_CASE("accum7")
 {
     test_accum7<int_holder>();
+}
+
+TEST_CASE("lg2") {
+    CHECK(lg2(1) == 0);
+    CHECK(lg2(2) == 1);
+    CHECK(lg2(3) == 1);
+    CHECK(lg2(4) == 2);
+    CHECK(lg2(255) == 7);
+    CHECK(lg2(256) == 8);
+    CHECK(lg2(257) == 8);
+
+    CHECK(lg2_up(1) == 0);
+    CHECK(lg2_up(2) == 1);
+    CHECK(lg2_up(3) == 2);
+    CHECK(lg2_up(4) == 2);
+    CHECK(lg2_up(255) == 8);
+    CHECK(lg2_up(256) == 8);
+    CHECK(lg2_up(257) == 9);
 }
 
 #ifdef __AVX512F__
