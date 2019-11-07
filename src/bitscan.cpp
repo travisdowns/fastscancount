@@ -89,10 +89,13 @@ void generic_populate_hits(std::vector<A>& accums,
 
 template <size_t N, typename traits, typename A>
 void handle_tail(size_t qidx, A& accums, const typename traits::aux_type& aux_info, const query_type& query) {
+    assert(qidx + N == query.size());
+
     std::array<const typename traits::btype*, N> bitmaps;
     std::array<const typename traits::elem_type*, N> eptrs;
-    for (size_t i = qidx; i < query.size(); i++) {
-        auto did = query.at(i);
+
+    for (size_t i = 0; i < N; i++) {
+        auto did = query.at(i + qidx);
         assert(did < aux_info.bitmaps.size());
         auto& bitmap = aux_info.bitmaps[did];
         bitmaps[i] = &bitmap;
@@ -101,13 +104,11 @@ void handle_tail(size_t qidx, A& accums, const typename traits::aux_type& aux_in
     }
 
     size_t chunk_count = aux_info.get_chunk_count();
-    for (; qidx < query.size(); qidx++) {
-        auto& bitmap = aux_info.bitmaps.at(query.at(qidx));
-        const typename  traits::elem_type *eptr = bitmap.elements.data();
-        for (size_t c = 0; c < chunk_count; c++) {
-            auto expanded = traits::expand(bitmap, c, eptr);
+    for (size_t c = 0; c < chunk_count; c++) {
+        for (size_t i = 0; i < N; i++) {
+            auto e = traits::expand(*bitmaps[i], c, eptrs[i]);
             assert(c < accums.size());
-            accums[c].accept(expanded);
+            accums[c].accept(e);
         }
     }
 }
