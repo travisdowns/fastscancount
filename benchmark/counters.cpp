@@ -336,7 +336,7 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
     // BENCHTEST(scancount, "baseline scancount", elapsed);
     BENCHTEST(fastscancount::fastscancount, "cache-sensitive scancount", elapsed_fast);
 
-    BENCHTEST(bitscan_fake2,  "bitscan_fake2", dummy, bitscan_aux32, query_elem);
+    // BENCHTEST(bitscan_fake2,  "bitscan_fake2", dummy, bitscan_aux32, query_elem);
 
 #ifdef __AVX2__
     BENCHTEST(fastscancount_avx2, "AVX2-based scancount", elapsed_avx);
