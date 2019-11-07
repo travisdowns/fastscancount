@@ -147,7 +147,7 @@ void analyze(const std::vector<std::vector<uint32_t>>& data,
     // }
     std::cout << "Total posting IDs: " << total_dsize << "\n";
     std::cout << "Min posting size: " << *std::min_element(data_sizes.begin(), data_sizes.end()) << "\n";
-    std::cout << "Avg query size  : " << total_dsize / data.size() << "\n";
+    std::cout << "Avg posting size: " << total_dsize / data.size() << "\n";
     std::cout << "Max posting size: " << *std::max_element(data_sizes.begin(), data_sizes.end()) << "\n";
 
     auto query_sizes = size_array(queries);
