@@ -69,6 +69,17 @@ struct avx512_traits {
 
 #endif
 
+template <typename traits>
+void generic_populate_hits(std::vector<typename traits::accum_type>& accums,
+                           out_type& out) {
+    size_t offset = 0;
+    for (auto& accum : accums) {
+        auto satflags = accum.get_saturated();
+        traits::populate_hits(satflags, offset, out);
+        offset += traits::chunk_bits;
+    }
+}
+
 template <size_t THRESHOLD, typename traits>
 void bitscan_generic(out_type& out,
                      const typename traits::aux_type& aux_info,
@@ -133,12 +144,7 @@ void bitscan_generic(out_type& out,
         }
     }
 
-    size_t offset = 0;
-    for (auto& accum : accums) {
-        auto satflags = accum.get_saturated();
-        traits::populate_hits(satflags, offset, out);
-        offset += traits::chunk_bits;
-    }
+    generic_populate_hits<traits>(accums, out);
 }
 
 
