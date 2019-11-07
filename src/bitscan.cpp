@@ -117,8 +117,19 @@ void handle_tail(
     std::copy(eptrs.begin(), eptrs.end(), all_eptrs.begin() + qidx);
 }
 
+#define UNROLL_X(fn, arg)\
+        fn(0, arg);  \
+        fn(1, arg);  \
+        fn(2, arg);  \
+        fn(3, arg);  \
+        fn(4, arg);  \
+        fn(5, arg);  \
+        fn(6, arg);  \
+        fn(7, arg);  \
+
 
 template <typename traits, size_t stream_count, typename A>
+HEDLEY_NEVER_INLINE
 void handle_middle(
         A& accums,
         typename traits::btype const * const * bitmaps,
@@ -127,40 +138,20 @@ void handle_middle(
         size_t end_chunk
     )
 {
-
-    // printf("start_chunk %zu qidx %zu\n", start_chunk, qidx);
-    // for (auto p : all_eptrs) {
-    //     printf("> %p\n", p);
-    // }
-
-    // std::copy(all_bitmaps.begin() + qidx, all_bitmaps.begin() + qidx + stream_count, bitmaps.begin());
-    // std::copy(all_eptrs.begin() + qidx, all_eptrs.begin() + qidx + stream_count, eptrs.begin());
-
-    // for (auto p : eptrs) {
-    //     printf("b %p\n", p);
-    // }
+    #define DEF_EPTR(i,_) typename traits::elem_type const *eptr_##i = eptrs[i];
+    UNROLL_X(DEF_EPTR,_);
 
     for (size_t c = start_chunk; c < end_chunk; c++) {
-        #define UNROLL(i) auto e##i = traits::expand(*bitmaps[i], c, eptrs[i]);
-
-        UNROLL(0);
-        UNROLL(1);
-        UNROLL(2);
-        UNROLL(3);
-        UNROLL(4);
-        UNROLL(5);
-        UNROLL(6);
-        UNROLL(7);
-
-        #undef UNROLL
-
+        #define BODY(i,_) auto e##i = traits::expand(*bitmaps[i], c, eptr_##i);
+        UNROLL_X(BODY,_);
 
         assert(c - start_chunk < accums.size());
         accums[c - start_chunk].accept8(e0, e1, e2, e3, e4, e5, e6, e7);
     }
 
     // copy the eptrs back for the next pass
-    // std::copy(eptrs.begin(), eptrs.end(), all_eptrs.begin() + qidx);
+    #define ASSIGN_EPTR(i,_) eptrs[i] = eptr_##i;
+    UNROLL_X(ASSIGN_EPTR,_);
 }
 
 template <size_t THRESHOLD, typename traits>
