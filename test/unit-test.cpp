@@ -205,6 +205,10 @@ struct accum512 : base {
         base::accept7(to_vec(v0), to_vec(v1), to_vec(v2), to_vec(v3), to_vec(v4), to_vec(v5), to_vec(v6));
     }
 
+    void accept8(int v0, int v1, int v2, int v3, int v4, int v5, int v6, int v7) {
+        base::accept8(to_vec(v0), to_vec(v1), to_vec(v2), to_vec(v3), to_vec(v4), to_vec(v5), to_vec(v6), to_vec(v7));
+    }
+
     std::vector<size_t> get_sums() {
         std::vector<size_t> ret, b = base::get_sums();
         assert(C <= b.size());
@@ -282,6 +286,32 @@ void test_many_b() {
             auto& sum = is_sum1 ? sum1 : sum0;
             sum = std::min(accum.max,
                     sum + (add0 + add1 + add2 + add3 + add4 + add5 + add6 >> (is_sum1 ? 1 : 0)));
+        }
+    }
+
+    for (int iter = 0; iter < 10; iter++) {
+        auto accum = T::template make<3, 2>();
+        size_t sum0 = 0, sum1 = 0;
+        for (int inner = 0; inner < 20; inner++) {
+
+            REQUIRE(accum.get_sums() == vst{sum0, sum1});
+
+            bool is_sum1 = d(gen);
+
+            int add0 = d(gen) << is_sum1;
+            int add1 = d(gen) << is_sum1;
+            int add2 = d(gen) << is_sum1;
+            int add3 = d(gen) << is_sum1;
+            int add4 = d(gen) << is_sum1;
+            int add5 = d(gen) << is_sum1;
+            int add6 = d(gen) << is_sum1;
+            int add7 = d(gen) << is_sum1;
+
+            accum.accept8(add0, add1, add2, add3, add4, add5, add6, add7);
+
+            auto& sum = is_sum1 ? sum1 : sum0;
+            sum = std::min(accum.max,
+                    sum + (add0 + add1 + add2 + add3 + add4 + add5 + add6 + add7 >> (is_sum1 ? 1 : 0)));
         }
     }
 }

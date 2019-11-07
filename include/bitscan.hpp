@@ -196,9 +196,15 @@ struct m512_traits {
         T carry, sum;
     };
 
+    /**
+     * vpternlogd cheatcheat:
+     * a = 0xF0
+     * b = 0xCC
+     * c = 0xAA
+     */
+
     /* aka full adder */
     static cs add3(T a, T b, T c) {
-        auto xor01 = xor_(a, b);
         return {
             _mm512_ternarylogic_epi32(a, b, c, 0xE8),  // carry
             _mm512_ternarylogic_epi32(a, b, c, 0x96)   // sum

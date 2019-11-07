@@ -447,10 +447,8 @@ HEDLEY_NEVER_INLINE
 void record_hits_c(const implb::aux_chunk_t<T>* aux_ptr,
                    const implb::aux_chunk_t<T>* aux_end,
                    uint32_t range_start) {
-  using aux_chunk = implb::aux_chunk_t<T>;
-
 #ifndef NDEBUG
-  const aux_chunk* aux_start = aux_ptr;
+  const implb::aux_chunk_t<T>* aux_start = aux_ptr;
 #endif
   const T* eptr = aux_ptr->start_ptr;
   assert(eptr);

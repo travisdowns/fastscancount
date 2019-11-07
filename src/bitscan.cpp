@@ -129,7 +129,7 @@ void bitscan_generic(out_type& out,
     accums.resize(chunk_count, accum_init);
 
     // first we take queries in chunks of 7
-    constexpr size_t stream_count = 7;
+    constexpr size_t stream_count = 8;
     size_t qidx = 0;
     for (; qidx + stream_count <= query.size();) {
         assert(qidx < query.size());
@@ -158,11 +158,12 @@ void bitscan_generic(out_type& out,
             UNROLL(4);
             UNROLL(5);
             UNROLL(6);
+            UNROLL(7);
 
             #undef UNROLL
 
             assert(c < accums.size());
-            accums[c].accept7(e0, e1, e2, e3, e4, e5, e6);
+            accums[c].accept8(e0, e1, e2, e3, e4, e5, e6, e7);
         }
     }
 
