@@ -117,6 +117,52 @@ void handle_tail(
     std::copy(eptrs.begin(), eptrs.end(), all_eptrs.begin() + qidx);
 }
 
+
+template <typename traits, size_t stream_count, typename A>
+void handle_middle(
+        A& accums,
+        typename traits::btype const * const * bitmaps,
+        typename traits::elem_type const * * eptrs,
+        size_t start_chunk,
+        size_t end_chunk
+    )
+{
+
+    // printf("start_chunk %zu qidx %zu\n", start_chunk, qidx);
+    // for (auto p : all_eptrs) {
+    //     printf("> %p\n", p);
+    // }
+
+    // std::copy(all_bitmaps.begin() + qidx, all_bitmaps.begin() + qidx + stream_count, bitmaps.begin());
+    // std::copy(all_eptrs.begin() + qidx, all_eptrs.begin() + qidx + stream_count, eptrs.begin());
+
+    // for (auto p : eptrs) {
+    //     printf("b %p\n", p);
+    // }
+
+    for (size_t c = start_chunk; c < end_chunk; c++) {
+        #define UNROLL(i) auto e##i = traits::expand(*bitmaps[i], c, eptrs[i]);
+
+        UNROLL(0);
+        UNROLL(1);
+        UNROLL(2);
+        UNROLL(3);
+        UNROLL(4);
+        UNROLL(5);
+        UNROLL(6);
+        UNROLL(7);
+
+        #undef UNROLL
+
+
+        assert(c - start_chunk < accums.size());
+        accums[c - start_chunk].accept8(e0, e1, e2, e3, e4, e5, e6, e7);
+    }
+
+    // copy the eptrs back for the next pass
+    // std::copy(eptrs.begin(), eptrs.end(), all_eptrs.begin() + qidx);
+}
+
 template <size_t THRESHOLD, typename traits>
 void bitscan_generic(out_type& out,
                      const typename traits::aux_type& aux_info,
@@ -161,47 +207,13 @@ void bitscan_generic(out_type& out,
         constexpr size_t stream_count = 8;
         size_t qidx = 0;
         for (; qidx + stream_count <= array_count; qidx += stream_count) {
-
-            std::array<const compressed_bitmap<T>*, stream_count> bitmaps;
-            std::array<const T*, stream_count> eptrs;
-
-            // printf("start_chunk %zu qidx %zu\n", start_chunk, qidx);
-            // for (auto p : all_eptrs) {
-            //     printf("> %p\n", p);
-            // }
-
-            std::copy(all_bitmaps.begin() + qidx, all_bitmaps.begin() + qidx + stream_count, bitmaps.begin());
-            std::copy(all_eptrs.begin() + qidx, all_eptrs.begin() + qidx + stream_count, eptrs.begin());
-
-            // for (auto p : eptrs) {
-            //     printf("b %p\n", p);
-            // }
-
-            for (size_t c = start_chunk; c < start_chunk + pass_chunk_count; c++) {
-                #define UNROLL(i) auto e##i = traits::expand(*bitmaps[i], c, eptrs[i]);
-
-                UNROLL(0);
-                UNROLL(1);
-                UNROLL(2);
-                UNROLL(3);
-                UNROLL(4);
-                UNROLL(5);
-                UNROLL(6);
-                UNROLL(7);
-
-                #undef UNROLL
-
-
-                assert(c - start_chunk < accums.size());
-                accums[c - start_chunk].accept8(e0, e1, e2, e3, e4, e5, e6, e7);
-            }
-
-            // copy the eptrs back for the next pass
-            std::copy(eptrs.begin(), eptrs.end(), all_eptrs.begin() + qidx);
+            auto bitmaps = &all_bitmaps.at(qidx);
+            auto eptrs = &all_eptrs.at(qidx);
+            handle_middle<traits, stream_count>(accums, bitmaps, eptrs, start_chunk, end_chunk);
         }
 
         // TODO get rid of this ugly switch
-        size_t rem = query.size() - qidx;
+        size_t rem = array_count - qidx;
         switch (rem) {
             case 0: break;
             case 1: handle_tail<1, traits>(qidx, accums, aux_info, query, all_bitmaps, all_eptrs, start_chunk, end_chunk); break;

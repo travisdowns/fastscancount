@@ -27,21 +27,21 @@
 /////////////////////////////
 
 /* the number of times to run each benchmark in demo mode */
-#define REPEATS 10
+#define REPEATS 2
 #define START_THRESHOLD  3
 #define END_THRESHOLD   11
 
 
-constexpr size_t DEMO_DOMAIN  = 20000000;
-constexpr size_t DEMO_ARRAY_SIZE  = 50000;
-constexpr size_t DEMO_ARRAY_COUNT =   100;
+//constexpr size_t DEMO_DOMAIN  =  20000000;
+//constexpr size_t DEMO_ARRAY_SIZE  = 50000;
+//constexpr size_t DEMO_ARRAY_COUNT =   100;
 
 // fast params
-/*
+
 constexpr size_t DEMO_DOMAIN  =   200000;
 constexpr size_t DEMO_ARRAY_SIZE  = 5000;
 constexpr size_t DEMO_ARRAY_COUNT =   20;
-*/
+
 //////////////////////
 // data mode params //
 //////////////////////
