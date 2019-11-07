@@ -27,19 +27,21 @@
 /////////////////////////////
 
 /* the number of times to run each benchmark in demo mode */
-#define REPEATS 1
+#define REPEATS 10
 #define START_THRESHOLD  3
 #define END_THRESHOLD   11
 
-// constexpr size_t DEMO_DOMAIN  = 20000000;
-// constexpr size_t DEMO_ARRAY_SIZE  = 50000;
-// constexpr size_t DEMO_ARRAY_COUNT =   100;
+
+constexpr size_t DEMO_DOMAIN  = 20000000;
+constexpr size_t DEMO_ARRAY_SIZE  = 50000;
+constexpr size_t DEMO_ARRAY_COUNT =   100;
 
 // fast params
+/*
 constexpr size_t DEMO_DOMAIN  =   200000;
 constexpr size_t DEMO_ARRAY_SIZE  = 5000;
 constexpr size_t DEMO_ARRAY_COUNT =   20;
-
+*/
 //////////////////////
 // data mode params //
 //////////////////////
@@ -89,12 +91,12 @@ std::vector<column_spec> all_columns = {
 #ifdef USE_COUNTERS
   // you must always leave CPU_CYCLES enabled
   { HW_EVENT(CPU_CYCLES   ),                  "cycles/element", [](double val, double cycles, size_t sum) -> double { return val / sum;          } },
-  // { HW_EVENT(INSTRUCTIONS ),                  "instr/cycle",    [](double val, double cycles, size_t sum) -> double { return val / cycles; } },
+  { HW_EVENT(INSTRUCTIONS ),                  "instr/cycle",    [](double val, double cycles, size_t sum) -> double { return val / cycles; } },
   // { HW_EVENT(INSTRUCTIONS ),                  "instr/elem",     [](double val, double cycles, size_t sum) -> double { return val / sum; } },
   // { HW_EVENT(BRANCH_MISSES),                  "miss/element",   [](double val, double cycles, size_t sum) -> double { return val / sum;          } },
-  { {PERF_TYPE_RAW, EVENT_L1D_REPL,        }, "l1 repl/element",[](double val, double cycles, size_t sum) -> double { return val / sum;    } },
-  { {PERF_TYPE_RAW, EVENT_UOPS_ISSUED,     }, "uops/cycle",     [](double val, double cycles, size_t sum) -> double { return val / cycles; } },
-  // { {PERF_TYPE_RAW, EVENT_UOPS_ISSUED,     }, "uops/elem",      [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  //{ {PERF_TYPE_RAW, EVENT_L1D_REPL,        }, "l1 repl/element",[](double val, double cycles, size_t sum) -> double { return val / sum;    } },
+  //{ {PERF_TYPE_RAW, EVENT_UOPS_ISSUED,     }, "uops/cycle",     [](double val, double cycles, size_t sum) -> double { return val / cycles; } },
+  { {PERF_TYPE_RAW, EVENT_UOPS_ISSUED,     }, "uops/elem",      [](double val, double cycles, size_t sum) -> double { return val / sum; } },
   // { {PERF_TYPE_RAW, EVENT_PEND_MISS,       }, "pmiss/elem",     [](double val, double cycles, size_t sum) -> double { return val / sum; } },
   // { {PERF_TYPE_RAW, EVENT_PEND_MISS_CYCLES,}, "pmiss_cyc/elem", [](double val, double cycles, size_t sum) -> double { return val / sum; } },
   { {PERF_TYPE_SOFTWARE, PERF_COUNT_SW_TASK_CLOCK}, "GHz", [](double val, double cycles, size_t sum) -> double { return cycles / val; } }
