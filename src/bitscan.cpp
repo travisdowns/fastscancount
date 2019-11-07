@@ -77,8 +77,7 @@ struct avx512_traits : base_traits<E, avx512_traits<E>> {
 
 template <typename traits, typename A>
 HEDLEY_NEVER_INLINE
-void generic_populate_hits(std::vector<A>& accums, out_type& out) {
-    size_t offset = 0;
+void generic_populate_hits(std::vector<A>& accums, out_type& out, size_t offset) {
     for (auto& accum : accums) {
         auto satflags = accum.get_saturated();
         traits::populate_hits(satflags, offset, out);
@@ -87,29 +86,35 @@ void generic_populate_hits(std::vector<A>& accums, out_type& out) {
 }
 
 template <size_t N, typename traits, typename A>
-void handle_tail(size_t qidx, A& accums, const typename traits::aux_type& aux_info, const query_type& query) {
+void handle_tail(
+    size_t qidx,
+    A& accums,
+    const typename traits::aux_type& aux_info,
+    const query_type& query,
+    std::vector<const typename traits::btype *>& all_bitmaps,
+    std::vector<const typename traits::elem_type*>& all_eptrs,
+    size_t start_chunk,
+    size_t end_chunk
+    )
+{
     assert(qidx + N == query.size());
 
     std::array<const typename traits::btype*, N> bitmaps;
     std::array<const typename traits::elem_type*, N> eptrs;
 
-    for (size_t i = 0; i < N; i++) {
-        auto did = query.at(i + qidx);
-        assert(did < aux_info.bitmaps.size());
-        auto& bitmap = aux_info.bitmaps[did];
-        bitmaps[i] = &bitmap;
-        eptrs[i] = bitmap.elements.data();
-        assert(bitmaps[i]->chunk_count() == chunk_count);
-    }
+    std::copy(all_bitmaps.begin() + qidx, all_bitmaps.begin() + qidx + N, bitmaps.begin());
+    std::copy(all_eptrs.begin() + qidx, all_eptrs.begin() + qidx + N, eptrs.begin());
 
-    size_t chunk_count = aux_info.get_chunk_count();
-    for (size_t c = 0; c < chunk_count; c++) {
+    for (size_t c = start_chunk; c < end_chunk; c++) {
         for (size_t i = 0; i < N; i++) {
             auto e = traits::expand(*bitmaps[i], c, eptrs[i]);
-            assert(c < accums.size());
-            accums[c].accept(e);
+            assert(c - start_chunk < accums.size());
+            accums[c - start_chunk].accept(e);
         }
     }
+
+    // copy the eptrs back for the next pass
+    std::copy(eptrs.begin(), eptrs.end(), all_eptrs.begin() + qidx);
 }
 
 template <size_t THRESHOLD, typename traits>
@@ -122,65 +127,95 @@ void bitscan_generic(out_type& out,
 
     assert(atype::max >= THRESHOLD + 1u); // need to increase A_BITS if this fails
 
-    const size_t chunk_count = aux_info.get_chunk_count();
+    const size_t array_count = query.size();
+    const size_t total_chunk_count = aux_info.get_chunk_count();
+    constexpr size_t chunks_per_pass = 128;
 
     atype accum_init(atype::max - THRESHOLD - 1);
+
+    std::vector<const compressed_bitmap<T>*> all_bitmaps;
+    std::vector<const T*> all_eptrs;
+    all_bitmaps.resize(array_count);
+    all_eptrs.resize(array_count);
+
+    for (size_t qidx = 0; qidx < array_count; qidx++) {
+        auto did = query.at(qidx);
+        assert(did < aux_info.bitmaps.size());
+        all_bitmaps[qidx] = &aux_info.bitmaps[did];;
+        all_eptrs[qidx]   = all_bitmaps[qidx]->elements.data();
+        assert(all_bitmaps[qidx]->chunk_count() == total_chunk_count);
+        assert(all_bitmaps[qidx] && all_eptrs[qidx]);
+    }
+
     std::vector<atype> accums;
-    accums.resize(chunk_count, accum_init);
+    // accums.resize(pass_chunk_count, accum_init);
 
-    // first we take queries in chunks of 7
-    constexpr size_t stream_count = 8;
-    size_t qidx = 0;
-    for (; qidx + stream_count <= query.size();) {
-        assert(qidx < query.size());
-        auto didx = query.at(qidx);
+    for (size_t start_chunk = 0; start_chunk < total_chunk_count; start_chunk += chunks_per_pass) {
 
-        std::array<const compressed_bitmap<T>*, stream_count> bitmaps;
-        std::array<const T*, stream_count> eptrs;
-        bitmaps.fill(nullptr);
+        const size_t pass_chunk_count = std::min(chunks_per_pass, total_chunk_count - start_chunk);
+        const size_t end_chunk = start_chunk + pass_chunk_count;
 
-        for (size_t i = 0; i < stream_count; i++) {
-            auto did = query.at(qidx++);
-            assert(did < aux_info.bitmaps.size());
-            auto& bitmap = aux_info.bitmaps[did];
-            bitmaps[i] = &bitmap;
-            eptrs[i] = bitmap.elements.data();
-            assert(bitmaps[i]->chunk_count() == chunk_count);
+        accums.assign(pass_chunk_count, accum_init);
+
+        // we take queries in blocks of 8
+        constexpr size_t stream_count = 8;
+        size_t qidx = 0;
+        for (; qidx + stream_count <= array_count; qidx += stream_count) {
+
+            std::array<const compressed_bitmap<T>*, stream_count> bitmaps;
+            std::array<const T*, stream_count> eptrs;
+
+            // printf("start_chunk %zu qidx %zu\n", start_chunk, qidx);
+            // for (auto p : all_eptrs) {
+            //     printf("> %p\n", p);
+            // }
+
+            std::copy(all_bitmaps.begin() + qidx, all_bitmaps.begin() + qidx + stream_count, bitmaps.begin());
+            std::copy(all_eptrs.begin() + qidx, all_eptrs.begin() + qidx + stream_count, eptrs.begin());
+
+            // for (auto p : eptrs) {
+            //     printf("b %p\n", p);
+            // }
+
+            for (size_t c = start_chunk; c < start_chunk + pass_chunk_count; c++) {
+                #define UNROLL(i) auto e##i = traits::expand(*bitmaps[i], c, eptrs[i]);
+
+                UNROLL(0);
+                UNROLL(1);
+                UNROLL(2);
+                UNROLL(3);
+                UNROLL(4);
+                UNROLL(5);
+                UNROLL(6);
+                UNROLL(7);
+
+                #undef UNROLL
+
+
+                assert(c - start_chunk < accums.size());
+                accums[c - start_chunk].accept8(e0, e1, e2, e3, e4, e5, e6, e7);
+            }
+
+            // copy the eptrs back for the next pass
+            std::copy(eptrs.begin(), eptrs.end(), all_eptrs.begin() + qidx);
         }
 
-        for (size_t c = 0; c < chunk_count; c++) {
-            #define UNROLL(i) auto e##i = traits::expand(*bitmaps[i], c, eptrs[i]);
-
-            UNROLL(0);
-            UNROLL(1);
-            UNROLL(2);
-            UNROLL(3);
-            UNROLL(4);
-            UNROLL(5);
-            UNROLL(6);
-            UNROLL(7);
-
-            #undef UNROLL
-
-            assert(c < accums.size());
-            accums[c].accept8(e0, e1, e2, e3, e4, e5, e6, e7);
+        // TODO get rid of this ugly switch
+        size_t rem = query.size() - qidx;
+        switch (rem) {
+            case 0: break;
+            case 1: handle_tail<1, traits>(qidx, accums, aux_info, query, all_bitmaps, all_eptrs, start_chunk, end_chunk); break;
+            case 2: handle_tail<2, traits>(qidx, accums, aux_info, query, all_bitmaps, all_eptrs, start_chunk, end_chunk); break;
+            case 3: handle_tail<3, traits>(qidx, accums, aux_info, query, all_bitmaps, all_eptrs, start_chunk, end_chunk); break;
+            case 4: handle_tail<4, traits>(qidx, accums, aux_info, query, all_bitmaps, all_eptrs, start_chunk, end_chunk); break;
+            case 5: handle_tail<5, traits>(qidx, accums, aux_info, query, all_bitmaps, all_eptrs, start_chunk, end_chunk); break;
+            case 6: handle_tail<6, traits>(qidx, accums, aux_info, query, all_bitmaps, all_eptrs, start_chunk, end_chunk); break;
+            default: assert(false);
         }
+
+
+        generic_populate_hits<traits>(accums, out, start_chunk * traits::chunk_bits);
     }
-
-    size_t rem = query.size() - qidx;
-    switch (rem) {
-        case 0: break;
-        case 1: handle_tail<1, traits>(qidx, accums, aux_info, query); break;
-        case 2: handle_tail<2, traits>(qidx, accums, aux_info, query); break;
-        case 3: handle_tail<3, traits>(qidx, accums, aux_info, query); break;
-        case 4: handle_tail<4, traits>(qidx, accums, aux_info, query); break;
-        case 5: handle_tail<5, traits>(qidx, accums, aux_info, query); break;
-        case 6: handle_tail<6, traits>(qidx, accums, aux_info, query); break;
-        default: assert(false);
-    }
-
-
-    generic_populate_hits<traits>(accums, out);
 }
 
 
