@@ -92,7 +92,7 @@ void handle_tail(size_t qidx, A& accums, const typename traits::aux_type& aux_in
     size_t chunk_count = aux_info.get_chunk_count();
     for (; qidx < query.size(); qidx++) {
         auto& bitmap = aux_info.bitmaps.at(query.at(qidx));
-        const typename traits::elem_type *eptr = bitmap.elements.data();
+        const typename  traits::elem_type *eptr = bitmap.elements.data();
         for (size_t c = 0; c < chunk_count; c++) {
             auto expanded = traits::expand(bitmap, c, eptr);
             assert(c < accums.size());
@@ -155,7 +155,18 @@ void bitscan_generic(out_type& out,
         }
     }
 
-    handle_tail<0, traits>(qidx, accums, aux_info, query);
+    size_t rem = query.size() - qidx;
+    switch (rem) {
+        case 0: break;
+        case 1: handle_tail<1, traits>(qidx, accums, aux_info, query); break;
+        case 2: handle_tail<2, traits>(qidx, accums, aux_info, query); break;
+        case 3: handle_tail<3, traits>(qidx, accums, aux_info, query); break;
+        case 4: handle_tail<4, traits>(qidx, accums, aux_info, query); break;
+        case 5: handle_tail<5, traits>(qidx, accums, aux_info, query); break;
+        case 6: handle_tail<6, traits>(qidx, accums, aux_info, query); break;
+        default: assert(false);
+    }
+
 
     generic_populate_hits<traits>(accums, out);
 }
