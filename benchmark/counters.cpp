@@ -339,11 +339,11 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
     // BENCHTEST(bitscan_fake2,  "bitscan_fake2", dummy, bitscan_aux32, query_elem);
 
 #ifdef __AVX2__
-    BENCHTEST(fastscancount_avx2, "AVX2-based scancount", elapsed_avx);
+    // BENCHTEST(fastscancount_avx2, "AVX2-based scancount", elapsed_avx);
 
-    BENCHTEST(fastscancount_avx2b32<fastscancount::record_hits_c>, "Try2 AVX2 in C", dummy, avx2b_aux32, query_elem);
+    // BENCHTEST(fastscancount_avx2b32<fastscancount::record_hits_c>, "Try2 AVX2 in C", dummy, avx2b_aux32, query_elem);
 
-    BENCHTEST((fastscancount_avx2b<uint32_t, fastscancount::record_hits_asm_branchy32>), "AVX2B ASM branchy    32b", elapsed_avx2b32,  avx2b_aux32, query_elem);
+    // BENCHTEST((fastscancount_avx2b<uint32_t, fastscancount::record_hits_asm_branchy32>), "AVX2B ASM branchy    32b", elapsed_avx2b32,  avx2b_aux32, query_elem);
     BENCHTEST((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchy16>), "AVX2B ASM branchy    16b", elapsed_avx2b16, avx2b_aux16, query_elem);
     // BENCHTEST((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchyB >), "AVX2B ASM branchy      B", elapsed_avx2b16b, avx2b_aux16, query_elem);
 
@@ -351,7 +351,8 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
     // BENCHTEST((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchless16>), "AVX2B ASM branchless 16b", elapsed_avx2bl16, avx2b_aux16, query_elem);
 #endif
 #ifdef __AVX512F__
-    BENCHTEST(bitscan_avx512, "bitscan_avx512", elapsed_bitscan, bitscan_aux32, query_elem);
+    BENCHTEST(bitscan_avx512,     "bitscan_avx512", elapsed_bitscan, bitscan_aux32, query_elem);
+    BENCHTEST(bitscan_avx512_asm, "bitscan_avx512_asm", dummy, bitscan_aux32, query_elem);
     BENCHTEST(fastscancount_avx512, "AVX512-based scancount", elapsed_avx512, range_size_avx512, range_ptrs);
 #endif
   }
@@ -452,9 +453,6 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
   // BENCH_LOOP(bitscan_scalar, "bitscan_scalar", dummy, bitscan_aux32, query_elem);
   // BENCH_LOOP(bitscan_fake,  "bitscan_fake", dummy, bitscan_aux32, query_elem);
   BENCH_LOOP(bitscan_fake2,  "bitscan_fake2", dummy, bitscan_aux32, query_elem);
-#ifdef __AVX512F__
-  BENCH_LOOP(bitscan_avx512,  "bitscan_avx512", dummy, bitscan_aux32, query_elem);
-#endif
 
 #ifdef __AVX2__
   BENCH_LOOP(fastscancount_avx2,  "AVX2-based scancount", elapsed_avx);
@@ -471,6 +469,8 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
 #endif
 
 #ifdef __AVX512F__
+  BENCH_LOOP(bitscan_avx512,  "bitscan_avx512", dummy, bitscan_aux32, query_elem);
+  BENCH_LOOP(bitscan_avx512_asm,  "bitscan_avx512_asm", dummy, bitscan_aux32, query_elem);
   BENCH_LOOP(fastscancount_avx512, "AVX512-based scancount", elapsed_avx512, range_size_avx512, range_ptrs);
 #endif
 

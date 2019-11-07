@@ -151,6 +151,10 @@ void bitscan_avx512(const data_ptrs &, std::vector<uint32_t> &out,
                 uint8_t threshold, const bitscan_all_aux<T>& aux_info,
                 const std::vector<uint32_t>& query);
 
+void bitscan_avx512_asm(const data_ptrs &, std::vector<uint32_t> &out,
+        uint8_t threshold, const bitscan_all_aux<uint32_t>& aux_info,
+        const std::vector<uint32_t>& query);
+
 
 inline boost::dynamic_bitset<> to_bitset(__m512i v) {
     using block_type = boost::dynamic_bitset<>::block_type;
@@ -197,7 +201,7 @@ struct m512_traits {
     };
 
     /**
-     * vpternlogd cheatcheat:
+     * vpternlogd cheatsheet:
      * a = 0xF0
      * b = 0xCC
      * c = 0xAA

@@ -73,6 +73,10 @@ struct avx512_traits : base_traits<E, avx512_traits<E>> {
     }
 };
 
+struct avx512_traits_asm : avx512_traits<uint32_t> {
+
+};
+
 #endif
 
 template <typename traits, typename A>
@@ -128,10 +132,10 @@ void handle_tail(
         fn(7, arg);  \
 
 
-template <typename traits, size_t stream_count, typename A>
-//HEDLEY_NEVER_INLINE
+template <typename traits, size_t stream_count, size_t B>
+HEDLEY_NEVER_INLINE
 void handle_middle(
-        A& accums,
+        std::vector<typename traits::template accum_type<B>>& accums,
         typename traits::btype const * const * bitmaps,
         typename traits::elem_type const * * eptrs,
         size_t start_chunk,
@@ -159,8 +163,9 @@ void bitscan_generic(out_type& out,
                      const typename traits::aux_type& aux_info,
                      const std::vector<uint32_t>& query)
 {
+    constexpr size_t B = lg2_up(THRESHOLD + 1); // number of bits needed in the accumulators
     using T = typename traits::elem_type;
-    using atype = typename traits::template accum_type<lg2_up(THRESHOLD + 1)>;
+    using atype = typename traits::template accum_type<B>;
 
     assert(atype::max >= THRESHOLD + 1u); // need to increase A_BITS if this fails
 
@@ -200,7 +205,7 @@ void bitscan_generic(out_type& out,
         for (; qidx + stream_count <= array_count; qidx += stream_count) {
             auto bitmaps = &all_bitmaps.at(qidx);
             auto eptrs = &all_eptrs.at(qidx);
-            handle_middle<traits, stream_count>(accums, bitmaps, eptrs, start_chunk, end_chunk);
+            handle_middle<traits, stream_count, B>(accums, bitmaps, eptrs, start_chunk, end_chunk);
         }
 
         // TODO get rid of this ugly switch
@@ -271,6 +276,16 @@ void bitscan_fake2(const data_ptrs &, std::vector<uint32_t> &out,
     if (threshold >= MAX_T) throw std::runtime_error("MAX_T too small");
     lut_holder<fake_traits<E>>::lut[threshold](out, aux_info, query);
 }
+
+#ifdef __AVX512F__
+void bitscan_avx512_asm(const data_ptrs &, std::vector<uint32_t> &out,
+                    uint8_t threshold, const bitscan_all_aux<uint32_t>& aux_info,
+                    const std::vector<uint32_t>& query)
+{
+    if (threshold >= MAX_T) throw std::runtime_error("MAX_T too small");
+    lut_holder<avx512_traits<uint32_t>>::lut[threshold](out, aux_info, query);
+}
+#endif
 
 /* explicit instantiations */
 
