@@ -59,7 +59,6 @@ struct avx512_traits : base_traits<E, avx512_traits<E>> {
         return bitmap.expand512(index, eptr);
     }
 
-    HEDLEY_NEVER_INLINE
     static void populate_hits(const chunk_type& flags, uint32_t offset, out_type& out) {
         auto flags64 = to_array<uint64_t>(flags);
         assert(flags64.size() * 64 == base::chunk_bits);
@@ -77,6 +76,7 @@ struct avx512_traits : base_traits<E, avx512_traits<E>> {
 #endif
 
 template <typename traits, typename A>
+HEDLEY_NEVER_INLINE
 void generic_populate_hits(std::vector<A>& accums,
                            out_type& out) {
     size_t offset = 0;
