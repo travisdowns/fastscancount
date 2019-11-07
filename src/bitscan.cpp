@@ -129,7 +129,7 @@ void handle_tail(
 
 
 template <typename traits, size_t stream_count, typename A>
-HEDLEY_NEVER_INLINE
+//HEDLEY_NEVER_INLINE
 void handle_middle(
         A& accums,
         typename traits::btype const * const * bitmaps,
