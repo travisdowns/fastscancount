@@ -69,21 +69,19 @@ struct avx512_traits {
 
 #endif
 
-
-template <typename traits>
+template <size_t THRESHOLD, typename traits>
 void bitscan_generic(out_type& out,
-                     uint8_t threshold,
                      const typename traits::aux_type& aux_info,
                      const std::vector<uint32_t>& query)
 {
     using T = typename traits::elem_type;
     using atype = typename traits::accum_type;
 
-    assert(atype::max >= threshold + 1u); // need to increase A_BITS if this fails
+    assert(atype::max >= THRESHOLD + 1u); // need to increase A_BITS if this fails
 
     const size_t chunk_count = aux_info.get_chunk_count();
 
-    atype accum_init(atype::max - threshold - 1);
+    atype accum_init(atype::max - THRESHOLD - 1);
     std::vector<atype> accums;
     accums.resize(chunk_count, accum_init);
 
@@ -144,25 +142,53 @@ void bitscan_generic(out_type& out,
 }
 
 
-template <typename T>
+template <typename traits>
+using bitscan_fn = void (out_type& out,
+                         const typename traits::aux_type& aux_info,
+                         const std::vector<uint32_t>& query);
+
+
+template <typename traits, size_t I, size_t MAX>
+constexpr void make_helper(std::array<bitscan_fn<traits> *, MAX>& a) {
+    if constexpr (I < MAX) {
+        a[I] = bitscan_generic<I, traits>;
+        make_helper<traits, I + 1, MAX>(a);
+    }
+}
+
+template <typename traits, size_t MAX>
+constexpr std::array<bitscan_fn<traits> *, MAX> make_lut() {
+    std::array<bitscan_fn<traits> *, MAX> ret{};
+    make_helper<traits, 1, MAX>(ret);
+    return ret;
+}
+
+static constexpr size_t MAX_T = 11;
+
+
+template <typename traits>
+struct lut_holder {
+    static constexpr std::array<bitscan_fn<traits> *, MAX_T> lut = make_lut<traits, MAX_T>();
+};
+
+template <typename E>
 void bitscan_avx512(const data_ptrs &, std::vector<uint32_t> &out,
-                uint8_t threshold, const bitscan_all_aux<T>& aux_info,
-                const std::vector<uint32_t>& query)
+                    uint8_t threshold, const bitscan_all_aux<E>& aux_info,
+                    const std::vector<uint32_t>& query)
 {
 #ifndef __AVX512F__
     throw std::runtime_error("not compiled for AVX-512");
 #else
-    bitscan_generic<avx512_traits<T>>(out, threshold, aux_info, query);
-
+    lut_holder<avx512_traits<E>>::lut[threshold](out, aux_info, query);
 #endif
 }
 
 template <typename E>
 void bitscan_fake2(const data_ptrs &, std::vector<uint32_t> &out,
-                uint8_t threshold, const bitscan_all_aux<E>& aux_info,
-                const std::vector<uint32_t>& query)
+                   uint8_t threshold, const bitscan_all_aux<E>& aux_info,
+                   const std::vector<uint32_t>& query)
 {
-    bitscan_generic<fake_traits<E>>(out, threshold, aux_info, query);
+    lut_holder<fake_traits<E>>::lut[threshold](out, aux_info, query);
 }
 
 /* explicit instantiations */
