@@ -1,5 +1,6 @@
 #include "accum7.hpp"
 #include "bitscan.hpp"
+#include "hedley.h"
 #include "simd-support.hpp"
 
 #include <immintrin.h>
@@ -58,6 +59,7 @@ struct avx512_traits : base_traits<E, avx512_traits<E>> {
         return bitmap.expand512(index, eptr);
     }
 
+    HEDLEY_NEVER_INLINE
     static void populate_hits(const chunk_type& flags, uint32_t offset, out_type& out) {
         auto flags64 = to_array<uint64_t>(flags);
         assert(flags64.size() * 64 == base::chunk_bits);
