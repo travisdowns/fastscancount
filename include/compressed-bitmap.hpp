@@ -2,6 +2,7 @@
 #define COMPRESSED_BITMAP_H_
 
 #include "boost/dynamic_bitset.hpp"
+#include "hedley.h"
 
 #include <immintrin.h>
 #include <inttypes.h>
@@ -62,6 +63,7 @@ struct compressed_bitmap {
     /**
      * Expand one chunk given its index and an element pointer (which will be udpated by this call).
      */
+    HEDLEY_ALWAYS_INLINE
     __m512i expand512(size_t idx, const T*& eptr) const {
         assert(idx < chunk_count());
         assert(eptr >= elements.data());

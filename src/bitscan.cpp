@@ -161,8 +161,8 @@ void handle_middle(
     UNROLL_X(ASSIGN_EPTR,_);
 }
 
-#define MIDDLE_ARGS                                                \
-        std::vector<accumulator<B, __m512i, m512_traits>>& accums, \
+#define MIDDLE_ARGS(b)                                             \
+        std::vector<accumulator<b, __m512i, m512_traits>>& accums, \
         compressed_bitmap<uint32_t> const * const * bitmaps,       \
         uint32_t const ** eptrs,                                   \
         size_t start_chunk,                                        \
@@ -176,17 +176,27 @@ struct avx512_traits_asm : avx512_traits<uint32_t> {
 
     template <size_t B>
     HEDLEY_NEVER_INLINE
-    static void override_middle( MIDDLE_ARGS );
+    static void override_middle( MIDDLE_ARGS(B) );
 };
 
 template<>
 constexpr bool avx512_traits_asm::has_override_middle<3> = true;
 
+/**
+ * Add -fno-stack-protector
+ */
+extern "C"
+void override_middle_asm_3( MIDDLE_ARGS(3) );
+// {
+//     handle_middle<avx512_traits<uint32_t>, 3>(accums, bitmaps, eptrs, start_chunk, end_chunk);
+// }
 
-template <size_t B>
-void avx512_traits_asm::override_middle( MIDDLE_ARGS ) {
-    handle_middle<avx512_traits, B>(accums, bitmaps, eptrs, start_chunk, end_chunk);
+template <>
+void avx512_traits_asm::override_middle<3>( MIDDLE_ARGS(3) ) {
+    override_middle_asm_3(accums, bitmaps, eptrs, start_chunk, end_chunk);
 }
+
+
 
 #endif
 

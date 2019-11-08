@@ -205,7 +205,161 @@ ALIGN   32
         ret
 %endmacro
 
-
 make_branchless 32, mov  , dword
 make_branchless 16, movzx, word
 
+GLOBAL override_middle_asm_3
+override_middle_asm_3:
+        push    rbp
+        mov     rax, r8
+        mov     rbp, rsp
+        push    r15
+        push    r14
+        push    r13
+        push    r12
+        push    rbx
+        and     rsp, -64
+        mov     qword [rsp-8H], r8
+        mov     r14, qword [rdx]
+        mov     r13, qword [rdx+8H]
+        mov     r12, qword [rdx+10H]
+        mov     rbx, qword [rdx+18H]
+        mov     r11, qword [rdx+20H]
+        mov     r10, qword [rdx+28H]
+        mov     r9, qword [rdx+30H]
+        mov     r8, qword [rdx+38H]
+        cmp     rcx, rax
+        jnc     ?_0737
+        mov     rax, qword [rsi]
+        mov     rax, qword [rax]
+        mov     qword [rsp-38H], rax
+        mov     rax, qword [rsi+8H]
+        mov     r15, qword [rax]
+        mov     rax, qword [rsi+10H]
+        mov     qword [rsp-30H], r15
+        mov     r15, qword [rax]
+        mov     rax, qword [rsi+18H]
+        mov     qword [rsp-28H], r15
+        mov     r15, qword [rax]
+        mov     rax, qword [rsi+20H]
+        mov     qword [rsp-20H], r15
+        mov     r15, qword [rax]
+        mov     rax, qword [rsi+28H]
+        mov     qword [rsp-18H], r15
+        mov     r15, qword [rax]
+        mov     rax, qword [rsi+30H]
+        mov     qword [rsp-10H], r15
+        mov     r15, qword [rax]
+        mov     rax, qword [rsi+38H]
+        mov     rsi, qword [rax]
+        mov     rax, qword [rdi]
+        mov     rdi, qword [rsp-38H]
+        mov     qword [rsp-38H], rdx
+; Filling space: 5
+; Filler type: Multi-byte NO
+;       db 0FH, 1FH, 44H, 00H, 00
+ALIGN
+?_0736: movzx   edx, word [rdi+rcx*2]
+        add     rax, 256
+        kmovw   k1, edx
+        movzx   edx, dx
+        vpexpandd zmm2 {k1}{z}, zword [r14]
+        popcnt  rdx, rdx
+        lea     r14, [r14+rdx*4]
+        mov     rdx, qword [rsp-30H]
+        vmovdqa64 zmm0, zmm2
+        movzx   edx, word [rdx+rcx*2]
+        kmovw   k2, edx
+        movzx   edx, dx
+        vpexpandd zmm5 {k2}{z}, zword [r13]
+        popcnt  rdx, rdx
+        lea     r13, [r13+rdx*4]
+        mov     rdx, qword [rsp-28H]
+        movzx   edx, word [rdx+rcx*2]
+        kmovw   k3, edx
+        movzx   edx, dx
+        vpexpandd zmm8 {k3}{z}, zword [r12]
+        popcnt  rdx, rdx
+        lea     r12, [r12+rdx*4]
+        mov     rdx, qword [rsp-20H]
+        vpternlogd zmm2, zmm5, zmm8, 96H
+        movzx   edx, word [rdx+rcx*2]
+        vpternlogd zmm0, zmm5, zmm8, 0E8H
+        kmovw   k4, edx
+        movzx   edx, dx
+        vpexpandd zmm3 {k4}{z}, zword [rbx]
+        popcnt  rdx, rdx
+        lea     rbx, [rbx+rdx*4]
+        mov     rdx, qword [rsp-18H]
+        vmovdqa64 zmm5, zmm3
+        movzx   edx, word [rdx+rcx*2]
+        kmovw   k5, edx
+        movzx   edx, dx
+        vpexpandd zmm6 {k5}{z}, zword [r11]
+        popcnt  rdx, rdx
+        lea     r11, [r11+rdx*4]
+        mov     rdx, qword [rsp-10H]
+        movzx   edx, word [rdx+rcx*2]
+        kmovw   k6, edx
+        movzx   edx, dx
+        vpexpandd zmm7 {k6}{z}, zword [r10]
+        popcnt  rdx, rdx
+        lea     r10, [r10+rdx*4]
+        movzx   edx, word [r15+rcx*2]
+        vpternlogd zmm5, zmm6, zmm7, 0E8H
+        kmovw   k7, edx
+        vpexpandd zmm1 {k7}{z}, zword [r9]
+        movzx   edx, dx
+        vpternlogd zmm3, zmm6, zmm7, 96H
+        popcnt  rdx, rdx
+        vmovdqa64 zmm6, zmm1
+        lea     r9, [r9+rdx*4]
+        movzx   edx, word [rsi+rcx*2]
+        vpternlogd zmm1, zmm2, zmm3, 96H
+        vpternlogd zmm6, zmm2, zmm3, 0E8H
+        vmovdqa64 zmm3, zmm0
+        vpternlogd zmm3, zmm5, zmm6, 0E8H
+        vpternlogd zmm0, zmm5, zmm6, 96H
+        kmovw   k1, edx
+        vmovdqa64 zmm5, zword [rax-4H*40H]
+        vpexpandd zmm4 {k1}{z}, zword [r8]
+        movzx   edx, dx
+        vmovdqa64 zmm2, zmm4
+        vpternlogd zmm4, zmm1, zmm5, 96H
+        vmovdqa64 zword [rax-4H*40H], zmm4
+        vmovdqa64 zmm4, zword [rax-3H*40H]
+        vpternlogd zmm2, zmm1, zmm5, 0E8H
+        vmovdqa64 zmm1, zmm2
+        vpternlogd zmm2, zmm0, zmm4, 96H
+        vpternlogd zmm1, zmm0, zmm4, 0E8H
+        vmovdqa64 zword [rax-3H*40H], zmm2
+        vmovdqa64 zmm2, zword [rax-2H*40H]
+        vmovdqa64 zmm0, zmm1
+        vpternlogd zmm0, zmm3, zmm2, 0E8H
+        vpord   zmm0, zmm0, zword [rax-1H*40H]
+        vpternlogd zmm1, zmm3, zmm2, 96H
+        inc     rcx
+        popcnt  rdx, rdx
+        vmovdqa64 zword [rax-2H*40H], zmm1
+        vmovdqa64 zword [rax-1H*40H], zmm0
+        lea     r8, [r8+rdx*4]
+        cmp     qword [rsp-8H], rcx
+        jne     ?_0736
+        mov     rdx, qword [rsp-38H]
+        vzeroupper
+?_0737: mov     qword [rdx], r14
+        mov     qword [rdx+8H], r13
+        mov     qword [rdx+10H], r12
+        mov     qword [rdx+18H], rbx
+        mov     qword [rdx+20H], r11
+        mov     qword [rdx+28H], r10
+        mov     qword [rdx+30H], r9
+        mov     qword [rdx+38H], r8
+        lea     rsp, [rbp-28H]
+        pop     rbx
+        pop     r12
+        pop     r13
+        pop     r14
+        pop     r15
+        pop     rbp
+        ret
