@@ -310,14 +310,14 @@ ALIGN 64
         lea     r10, [r10+rdx*4]
 
         movzx   edx, word [r15+rcx*2]
-        vpternlogd zmm5, zmm6, zmm7, 0E8H
         kmovw   k7, edx
         vpexpandd zmm1 {k7}{z}, zword [r9]
-        vpternlogd zmm3, zmm6, zmm7, 96H
         popcnt  rdx, rdx
         vmovdqa64 zmm6, zmm1
         lea     r9, [r9+rdx*4]
 
+        vpternlogd zmm5, zmm6, zmm7, 0E8H
+        vpternlogd zmm3, zmm6, zmm7, 96H
         movzx   edx, word [rsi+rcx*2]
         vpternlogd zmm1, zmm2, zmm3, 96H
         vpternlogd zmm6, zmm2, zmm3, 0E8H
