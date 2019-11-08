@@ -320,7 +320,8 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
   std::vector<const std::vector<uint32_t>*> range_ptrs;
 
   float elapsed = 0, elapsed_fast = 0, elapsed_avx = 0, elapsed_avx2b32 = 0, elapsed_avx2b16 = 0,
-      elapsed_avx2b16b = 0, elapsed_avx2bl16 = 0, elapsed_bitscan = 0, elapsed_avx512 = 0, dummy = 0;
+      elapsed_avx2b16b = 0, elapsed_avx2bl16 = 0, elapsed_bitscan = 0, elapsed_bitscan_asm = 0,
+      elapsed_avx512 = 0, dummy = 0;
 
   size_t sum_total = 0;
 
@@ -373,9 +374,8 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
     // BENCHTEST((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchless16>), "AVX2B ASM branchless 16b", elapsed_avx2bl16, avx2b_aux16, query_elem);
 #endif
 #ifdef __AVX512F__
-    BENCHTEST(bitscan_avx512,     "bitscan_avx512", dummy, bitscan_aux32, query_elem);
-    BENCHTEST(bitscan_avx512_asm, "bitscan_avx512_asm", dummy, bitscan_aux32, query_elem);
     BENCHTEST(bitscan_avx512,     "bitscan_avx512", elapsed_bitscan, bitscan_aux32, query_elem);
+    BENCHTEST(bitscan_avx512_asm, "bitscan_avx512_asm", elapsed_bitscan_asm, bitscan_aux32, query_elem);
     BENCHTEST(fastscancount_avx512, "AVX512-based scancount", elapsed_avx512, range_size_avx512, range_ptrs);
 #endif
   }
@@ -384,18 +384,19 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
 #define ELAPSEDOUT(var) std::setprecision(0) << (sum_total/(var/1e3)) \
     << std::setprecision(2) << std::setw(8) << (elapsed_fast/var) << '\n'
   std::cout << "Algorithm        Elems/ms    Speedup vs fastscancount" << std::endl;
-  std::cout << "scancount:        " << std::setw(8) << ELAPSEDOUT(elapsed);
-  std::cout << "fastscancount:    " << std::setw(8) << ELAPSEDOUT(elapsed_fast);
+  std::cout << "scancount         :" << std::setw(8) << ELAPSEDOUT(elapsed);
+  std::cout << "fastscancount     :" << std::setw(8) << ELAPSEDOUT(elapsed_fast);
 #ifdef __AVX2__
-  std::cout << "fastscan_avx2    :" << std::setw(8) << ELAPSEDOUT(elapsed_avx);
-  std::cout << "fastscan_avx2bb  :" << std::setw(8) << ELAPSEDOUT(elapsed_avx2b32);
-  std::cout << "fastscan_avx2b16 :" << std::setw(8) << ELAPSEDOUT(elapsed_avx2b16);
-  std::cout << "fastscan_avx2b16B:" << std::setw(8) << ELAPSEDOUT(elapsed_avx2b16b);
-  std::cout << "fastscan_avx2bl16:" << std::setw(8) << ELAPSEDOUT(elapsed_avx2bl16);
+  std::cout << "fastscan_avx2     :" << std::setw(8) << ELAPSEDOUT(elapsed_avx);
+  std::cout << "fastscan_avx2bb   :" << std::setw(8) << ELAPSEDOUT(elapsed_avx2b32);
+  std::cout << "fastscan_avx2b16  :" << std::setw(8) << ELAPSEDOUT(elapsed_avx2b16);
+  std::cout << "fastscan_avx2b16B :" << std::setw(8) << ELAPSEDOUT(elapsed_avx2b16b);
+  std::cout << "fastscan_avx2bl16 :" << std::setw(8) << ELAPSEDOUT(elapsed_avx2bl16);
 #endif
 #ifdef __AVX512F__
-  std::cout << "bitscan_avx512:   " << std::setw(8) << ELAPSEDOUT(elapsed_bitscan);
-  std::cout << "fastsct_avx512:   " << std::setw(8) << ELAPSEDOUT(elapsed_avx512);
+  std::cout << "bitscan_avx512    :" << std::setw(8) << ELAPSEDOUT(elapsed_bitscan);
+  std::cout << "bitscan_avx512_asm:" << std::setw(8) << ELAPSEDOUT(elapsed_bitscan_asm);
+  std::cout << "fastsct_avx512    :" << std::setw(8) << ELAPSEDOUT(elapsed_avx512);
 #endif
 
   std::cout << std::flush;
