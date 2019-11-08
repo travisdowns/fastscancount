@@ -374,8 +374,8 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
     // BENCHTEST((fastscancount_avx2b<uint16_t, fastscancount::record_hits_asm_branchless16>), "AVX2B ASM branchless 16b", elapsed_avx2bl16, avx2b_aux16, query_elem);
 #endif
 #ifdef __AVX512F__
-    BENCHTEST(bitscan_avx512_asm, "bitscan_avx512_asm", elapsed_bitscan_asm, bitscan_aux32, query_elem);
     BENCHTEST(bitscan_avx512,     "bitscan_avx512", elapsed_bitscan, bitscan_aux32, query_elem);
+    BENCHTEST(bitscan_avx512_asm, "bitscan_avx512_asm", elapsed_bitscan_asm, bitscan_aux32, query_elem);
     BENCHTEST(fastscancount_avx512, "AVX512-based scancount", elapsed_avx512, range_size_avx512, range_ptrs);
 #endif
   }
