@@ -27,7 +27,7 @@
 /////////////////////////////
 
 /* the number of times to run each benchmark in demo mode */
-#define REPEATS 10
+#define REPEATS_RANDOM 10
 #define START_THRESHOLD  3
 #define END_THRESHOLD   11
 
@@ -278,12 +278,15 @@ void print_headers() {
     },                  \
     name, elapsed, answer, sum, expected, print);
 
-#define BENCHTEST(fn, name, elapsed, ...) TEST(fn, ## __VA_ARGS__) BENCH(fn, name, elapsed, ##__VA_ARGS__)
+#define BENCHTEST(fn, name, elapsed, ...) \
+  TEST(fn, ## __VA_ARGS__) \
+  BENCH(fn, name, dummy, ##__VA_ARGS__) \
+  BENCH(fn, name, elapsed, ##__VA_ARGS__)
 
 #define BENCH_LOOP(fn, name, elapsed, ...)  \
   TEST(fn, ## __VA_ARGS__) \
-  for (size_t t = 0; t < REPEATS; t++) {    \
-    bool print = (t == REPEATS - 1);         \
+  for (size_t t = 0; t < REPEATS_RANDOM; t++) {    \
+    bool print = (t == REPEATS_RANDOM - 1);         \
     BENCH(fn, name, elapsed, ## __VA_ARGS__ ); \
   } \
 
@@ -347,9 +350,9 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
     std::cout << "Qid: " << qid << " got " << expected << " hits [thresh = "
         << threshold << ", array count = " << data_ptrs.size() << "]\n";
 
-    bool print = PRINT_ALL || (qid == qcount - 1);
+    bool print_outer = PRINT_ALL || (qid == qcount - 1);
 
-    if (print)
+    if (print_outer)
       print_headers();
 
     // BENCHTEST(scancount, "baseline scancount", elapsed);
@@ -463,7 +466,7 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
   fastscancount::scancount(data_ptrs, answer, threshold);
   const size_t expected = answer.size();
   std::cout << "Got " << expected << " hits\n";
-  size_t sum_total = sum * REPEATS;
+  size_t sum_total = sum * REPEATS_RANDOM;
 
   print_headers();
 
