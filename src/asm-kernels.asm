@@ -286,9 +286,9 @@ ALIGN 64
         lea     r12, [r12+rdx*4]
 
         mov     rdx, qword [rsp-20H]
-        vpternlogd zmm2, zmm5, zmm8, 96H
+        vpternlogd zmm2, zmm5, zmm8, 0x96
         movzx   edx, word [rdx+rcx*2]
-        vpternlogd zmm0, zmm5, zmm8, 0E8H
+        vpternlogd zmm0, zmm5, zmm8, 0xE8
         kmovw   k4, edx
         vpexpandd zmm3 {k4}{z}, zword [rbx]
         popcnt  rdx, rdx
@@ -319,38 +319,41 @@ ALIGN 64
         kmovw   k1, edx
         vpexpandd zmm4 {k1}{z}, zword [r8]
         popcnt  rdx, rdx
+        lea     r8, [r8+rdx*4]
 
         vmovdqa64 zmm5, zmm3
-        vpternlogd zmm5, zmm6, zmm7, 0E8H
-        vpternlogd zmm3, zmm6, zmm7, 96H
+        vpternlogd zmm5, zmm6, zmm7, 0xE8
+        vpternlogd zmm3, zmm6, zmm7, 0x96
 
         vmovdqa64 zmm6, zmm1
-        vpternlogd zmm1, zmm2, zmm3, 96H
-        vpternlogd zmm6, zmm2, zmm3, 0E8H
+        vpternlogd zmm1, zmm2, zmm3, 0x96
+        vpternlogd zmm6, zmm2, zmm3, 0xE8
 
         vmovdqa64 zmm3, zmm0
-        vpternlogd zmm3, zmm5, zmm6, 0E8H
-        vpternlogd zmm0, zmm5, zmm6, 96H
+        vpternlogd zmm3, zmm5, zmm6, 0xE8
+        vpternlogd zmm0, zmm5, zmm6, 0x96
 
         vmovdqa64 zmm5, zword [rax-4H*40H]
         vmovdqa64 zmm2, zmm4
-        vpternlogd zmm4, zmm1, zmm5, 96H
+        vpternlogd zmm4, zmm1, zmm5, 0x96
+        vpternlogd zmm2, zmm1, zmm5, 0xE8
         vmovdqa64 zword [rax-4H*40H], zmm4
+
         vmovdqa64 zmm4, zword [rax-3H*40H]
-        vpternlogd zmm2, zmm1, zmm5, 0E8H
         vmovdqa64 zmm1, zmm2
-        vpternlogd zmm2, zmm0, zmm4, 96H
-        vpternlogd zmm1, zmm0, zmm4, 0E8H
+        vpternlogd zmm2, zmm0, zmm4, 0x96
+        vpternlogd zmm1, zmm0, zmm4, 0xE8
         vmovdqa64 zword [rax-3H*40H], zmm2
+
         vmovdqa64 zmm2, zword [rax-2H*40H]
         vmovdqa64 zmm0, zmm1
-        vpternlogd zmm0, zmm3, zmm2, 0E8H
+        vpternlogd zmm0, zmm3, zmm2, 0xE8
         vpord   zmm0, zmm0, zword [rax-1H*40H]
-        vpternlogd zmm1, zmm3, zmm2, 96H
-        inc     rcx
+        vpternlogd zmm1, zmm3, zmm2, 0x96
         vmovdqa64 zword [rax-2H*40H], zmm1
         vmovdqa64 zword [rax-1H*40H], zmm0
-        lea     r8, [r8+rdx*4]
+
+        inc     rcx
         cmp     qword [rsp-8H], rcx
         jne     .top
 
