@@ -164,7 +164,7 @@ void analyze(const std::vector<std::vector<uint32_t>>& data,
 
     // std::cou    t << std::flush;
 
-    size_t totali = 0;
+    size_t totali = 0, total_bytes = 0;
     // calculate element frequncy
     std::vector<uint32_t> counts(largest + 1);
     for (auto& d : data) {
@@ -178,12 +178,14 @@ void analyze(const std::vector<std::vector<uint32_t>>& data,
         }
 
         // check_chunk_freq(d, 512);
-        check_compressed_cost(d, 512, 4);
+        // check_compressed_cost(d, 512, 4);
         compressed_bitmap<uint32_t> cb(d, largest);
-        printf("Bits per entry B        : %6.3f\n", 8. * cb.byte_size() / d.size());
+        total_bytes += cb.byte_size();
+        // printf("Bits per entry B        : %6.3f\n", 8. * cb.byte_size() / d.size());
     }
 
     std::cout << "totali: " << totali << "\n";
+    std::cout << "Total bits per entry: " << (8. * total_bytes / totali) << "\n";
 
     std::vector<id_count> sorted_counts(counts.size());
     for (uint32_t i = 0; i < counts.size(); i++) {

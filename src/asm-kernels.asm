@@ -318,6 +318,7 @@ ALIGN 64
         movzx   edx, word [rsi+rcx*2]
         kmovw   k1, edx
         vpexpandd zmm4 {k1}{z}, zword [r8]
+        popcnt  rdx, rdx
 
         vmovdqa64 zmm5, zmm3
         vpternlogd zmm5, zmm6, zmm7, 0E8H
@@ -330,6 +331,7 @@ ALIGN 64
         vmovdqa64 zmm3, zmm0
         vpternlogd zmm3, zmm5, zmm6, 0E8H
         vpternlogd zmm0, zmm5, zmm6, 96H
+
         vmovdqa64 zmm5, zword [rax-4H*40H]
         vmovdqa64 zmm2, zmm4
         vpternlogd zmm4, zmm1, zmm5, 96H
@@ -346,7 +348,6 @@ ALIGN 64
         vpord   zmm0, zmm0, zword [rax-1H*40H]
         vpternlogd zmm1, zmm3, zmm2, 96H
         inc     rcx
-        popcnt  rdx, rdx
         vmovdqa64 zword [rax-2H*40H], zmm1
         vmovdqa64 zword [rax-1H*40H], zmm0
         lea     r8, [r8+rdx*4]

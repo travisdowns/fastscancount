@@ -27,8 +27,8 @@
 /////////////////////////////
 
 /* the number of times to run each benchmark in demo mode */
-#define REPEATS 2
-#define START_THRESHOLD  5
+#define REPEATS 10
+#define START_THRESHOLD  3
 #define END_THRESHOLD   11
 
 
@@ -65,6 +65,14 @@ constexpr int EVENT_L1D_REPL          =     0x151;
 constexpr int EVENT_UOPS_ISSUED       =     0x10e;
 constexpr int EVENT_PEND_MISS         =     0x148;
 constexpr int EVENT_PEND_MISS_CYCLES  = 0x1000148;
+constexpr int EVENT_P0_UOPS           =    0x01a1;
+constexpr int EVENT_P1_UOPS           =    0x02a1;
+constexpr int EVENT_P2_UOPS           =    0x04a1;
+constexpr int EVENT_P3_UOPS           =    0x08a1;
+constexpr int EVENT_P4_UOPS           =    0x10a1;
+constexpr int EVENT_P5_UOPS           =    0x20a1;
+constexpr int EVENT_P6_UOPS           =    0x40a1;
+constexpr int EVENT_P7_UOPS           =    0x80a1;
 
 
 #if defined(__linux__) && !defined(NO_COUNTERS)
@@ -94,11 +102,22 @@ std::vector<column_spec> all_columns = {
   // { HW_EVENT(INSTRUCTIONS ),                  "instr/cycle",    [](double val, double cycles, size_t sum) -> double { return val / cycles; } },
   // { HW_EVENT(INSTRUCTIONS ),                  "instr/elem",     [](double val, double cycles, size_t sum) -> double { return val / sum; } },
   // { HW_EVENT(BRANCH_MISSES),                  "miss/element",   [](double val, double cycles, size_t sum) -> double { return val / sum;          } },
-  { {PERF_TYPE_RAW, EVENT_L1D_REPL,        }, "l1 repl/element",[](double val, double cycles, size_t sum) -> double { return val / sum;    } },
-  { {PERF_TYPE_RAW, EVENT_UOPS_ISSUED,     }, "uops/cycle",     [](double val, double cycles, size_t sum) -> double { return val / cycles; } },
+  // { {PERF_TYPE_RAW, EVENT_L1D_REPL,        }, "l1 repl/element",[](double val, double cycles, size_t sum) -> double { return val / sum;    } },
+  // { {PERF_TYPE_RAW, EVENT_UOPS_ISSUED,     }, "uops/cycle",     [](double val, double cycles, size_t sum) -> double { return val / cycles; } },
   { {PERF_TYPE_RAW, EVENT_UOPS_ISSUED,     }, "uops/elem",      [](double val, double cycles, size_t sum) -> double { return val / sum; } },
   // { {PERF_TYPE_RAW, EVENT_PEND_MISS,       }, "pmiss/elem",     [](double val, double cycles, size_t sum) -> double { return val / sum; } },
   // { {PERF_TYPE_RAW, EVENT_PEND_MISS_CYCLES,}, "pmiss_cyc/elem", [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+
+  // { {PERF_TYPE_RAW, EVENT_P0_UOPS,     }, "p0_ops/elem",        [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  // { {PERF_TYPE_RAW, EVENT_P1_UOPS,     }, "p1_ops/elem",        [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  // { {PERF_TYPE_RAW, EVENT_P2_UOPS,     }, "p2_ops/elem",        [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  // { {PERF_TYPE_RAW, EVENT_P3_UOPS,     }, "p3_ops/elem",        [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  // { {PERF_TYPE_RAW, EVENT_P4_UOPS,     }, "p4_ops/elem",        [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  // { {PERF_TYPE_RAW, EVENT_P5_UOPS,     }, "p5_ops/elem",        [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  { {PERF_TYPE_RAW, EVENT_P6_UOPS,     }, "p6_ops/elem",        [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  { {PERF_TYPE_RAW, EVENT_P7_UOPS,     }, "p7_ops/elem",        [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+
+
   { {PERF_TYPE_SOFTWARE, PERF_COUNT_SW_TASK_CLOCK}, "GHz", [](double val, double cycles, size_t sum) -> double { return cycles / val; } }
 #endif
 };
