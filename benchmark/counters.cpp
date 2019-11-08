@@ -280,8 +280,8 @@ void print_headers() {
 
 #define BENCHTEST(fn, name, elapsed, ...) \
   TEST(fn, ## __VA_ARGS__) \
-  BENCH(fn, name, dummy, ##__VA_ARGS__) \
-  BENCH(fn, name, elapsed, ##__VA_ARGS__)
+  { bool print = false;      BENCH(fn, name,   dummy, ##__VA_ARGS__) } \
+  { bool print = print_outer;BENCH(fn, name, elapsed, ##__VA_ARGS__) }
 
 #define BENCH_LOOP(fn, name, elapsed, ...)  \
   TEST(fn, ## __VA_ARGS__) \
