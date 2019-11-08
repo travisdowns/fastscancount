@@ -65,10 +65,12 @@ struct compressed_bitmap {
     __m512i expand512(size_t idx, const T*& eptr) const {
         assert(idx < chunk_count());
         assert(eptr >= elements.data());
-        if (!(eptr < elements.data() + elements.size())) {
-            printf("eptr %p s: %p e: %p\n", eptr, elements.data(), elements.data() + elements.size());
-            assert(false);
-        }
+        assert(eptr + 64/sizeof(*eptr) <= elements.data() + elements.capacity());  // naughty check that our read is valid
+        // if (!(eptr + 64/sizeof(*eptr) <= elements.data() + elements.capacity())) {
+        //     printf("eptr %p s: %p e: %p ec: %p\n", eptr, elements.data(),
+        //             elements.data() + elements.size(), elements.data() + elements.capacity());
+        //     assert(false);
+        // }
         auto mask = _load_mask16(const_cast<control_type *>(control.data()) + idx);
         auto data = _mm512_loadu_si512(eptr);
         auto expanded = _mm512_maskz_expand_epi32(mask, data);

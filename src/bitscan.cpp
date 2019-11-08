@@ -10,6 +10,16 @@ namespace fastscancount {
 using query_type = std::vector<uint32_t>;
 using out_type = std::vector<uint32_t>;
 
+#define UNROLL_X(fn, arg)\
+        fn(0, arg);  \
+        fn(1, arg);  \
+        fn(2, arg);  \
+        fn(3, arg);  \
+        fn(4, arg);  \
+        fn(5, arg);  \
+        fn(6, arg);  \
+        fn(7, arg);  \
+
 
 template <typename E, typename D>
 struct base_traits {
@@ -18,6 +28,9 @@ struct base_traits {
     using btype = compressed_bitmap<E>;
 
     static constexpr size_t chunk_bits = btype::chunk_bits;
+
+    template <size_t B>
+    static constexpr bool has_override_middle = false;
 };
 
 /*
@@ -73,10 +86,6 @@ struct avx512_traits : base_traits<E, avx512_traits<E>> {
     }
 };
 
-struct avx512_traits_asm : avx512_traits<uint32_t> {
-
-};
-
 #endif
 
 template <typename traits, typename A>
@@ -121,18 +130,7 @@ void handle_tail(
     std::copy(eptrs.begin(), eptrs.end(), all_eptrs.begin() + qidx);
 }
 
-#define UNROLL_X(fn, arg)\
-        fn(0, arg);  \
-        fn(1, arg);  \
-        fn(2, arg);  \
-        fn(3, arg);  \
-        fn(4, arg);  \
-        fn(5, arg);  \
-        fn(6, arg);  \
-        fn(7, arg);  \
-
-
-template <typename traits, size_t stream_count, size_t B>
+template <typename traits, size_t B>
 HEDLEY_NEVER_INLINE
 void handle_middle(
         std::vector<typename traits::template accum_type<B>>& accums,
@@ -142,6 +140,11 @@ void handle_middle(
         size_t end_chunk
     )
 {
+    if constexpr (traits::template has_override_middle<B>) {
+        DBG(printf("Using override_middle for %zu %s\n", B, __PRETTY_FUNCTION__));
+        traits::override_middle(accums, bitmaps, eptrs, start_chunk, end_chunk);
+        return;
+    }
     #define DEF_EPTR(i,_) typename traits::elem_type const *eptr_##i = eptrs[i];
     UNROLL_X(DEF_EPTR,_);
 
@@ -157,6 +160,35 @@ void handle_middle(
     #define ASSIGN_EPTR(i,_) eptrs[i] = eptr_##i;
     UNROLL_X(ASSIGN_EPTR,_);
 }
+
+#define MIDDLE_ARGS                                                \
+        std::vector<accumulator<B, __m512i, m512_traits>>& accums, \
+        compressed_bitmap<uint32_t> const * const * bitmaps,       \
+        uint32_t const ** eptrs,                                   \
+        size_t start_chunk,                                        \
+        size_t end_chunk                                           \
+
+#ifdef __AVX512F__
+
+struct avx512_traits_asm : avx512_traits<uint32_t> {
+    template <size_t B>
+    static constexpr bool has_override_middle = false;
+
+    template <size_t B>
+    HEDLEY_NEVER_INLINE
+    static void override_middle( MIDDLE_ARGS );
+};
+
+template<>
+constexpr bool avx512_traits_asm::has_override_middle<3> = true;
+
+
+template <size_t B>
+void avx512_traits_asm::override_middle( MIDDLE_ARGS ) {
+    handle_middle<avx512_traits, B>(accums, bitmaps, eptrs, start_chunk, end_chunk);
+}
+
+#endif
 
 template <size_t THRESHOLD, typename traits>
 void bitscan_generic(out_type& out,
@@ -205,7 +237,7 @@ void bitscan_generic(out_type& out,
         for (; qidx + stream_count <= array_count; qidx += stream_count) {
             auto bitmaps = &all_bitmaps.at(qidx);
             auto eptrs = &all_eptrs.at(qidx);
-            handle_middle<traits, stream_count, B>(accums, bitmaps, eptrs, start_chunk, end_chunk);
+            handle_middle<traits, B>(accums, bitmaps, eptrs, start_chunk, end_chunk);
         }
 
         // TODO get rid of this ugly switch
@@ -283,7 +315,7 @@ void bitscan_avx512_asm(const data_ptrs &, std::vector<uint32_t> &out,
                     const std::vector<uint32_t>& query)
 {
     if (threshold >= MAX_T) throw std::runtime_error("MAX_T too small");
-    lut_holder<avx512_traits<uint32_t>>::lut[threshold](out, aux_info, query);
+    lut_holder<avx512_traits_asm>::lut[threshold](out, aux_info, query);
 }
 #endif
 

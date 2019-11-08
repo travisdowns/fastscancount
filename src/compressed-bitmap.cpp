@@ -119,6 +119,11 @@ compressed_bitmap<T>::compressed_bitmap(const std::vector<uint32_t>& array, uint
     assert(elements.size() <= array.size());
     assert(control.size() == div_up((size_t)(largest + 1), chunk_bits) );
     DBG(printf("arr size: %zu control size: %zu elem size %zu\n", array.size(), control.size(), elements.size()));
+
+    // add some buffer to the end of elements, so overreads don't fail
+    // this isn't the right way to do it, but works in practice and will
+    // pass valgrind (and ASAN I think)
+    elements.reserve(elements.size() + 64 / sizeof(T));
 }
 
 template <typename T>
