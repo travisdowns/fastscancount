@@ -258,8 +258,8 @@ override_middle_asm_3:
 ; Filling space: 5
 ; Filler type: Multi-byte NO
 ;       db 0FH, 1FH, 44H, 00H, 00
-ALIGN
-?_0736: movzx   edx, word [rdi+rcx*2]
+ALIGN 64
+.top: movzx   edx, word [rdi+rcx*2]
         add     rax, 256
         kmovw   k1, edx
         movzx   edx, dx
@@ -344,7 +344,7 @@ ALIGN
         vmovdqa64 zword [rax-1H*40H], zmm0
         lea     r8, [r8+rdx*4]
         cmp     qword [rsp-8H], rcx
-        jne     ?_0736
+        jne     .top
         mov     rdx, qword [rsp-38H]
         vzeroupper
 ?_0737: mov     qword [rdx], r14
