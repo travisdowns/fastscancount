@@ -101,21 +101,21 @@ std::vector<column_spec> all_columns = {
   { HW_EVENT(CPU_CYCLES   ),                  "cycles/element", [](double val, double cycles, size_t sum) -> double { return val / sum;          } },
   // { HW_EVENT(INSTRUCTIONS ),                  "instr/cycle",    [](double val, double cycles, size_t sum) -> double { return val / cycles; } },
   // { HW_EVENT(INSTRUCTIONS ),                  "instr/elem",     [](double val, double cycles, size_t sum) -> double { return val / sum; } },
-  // { HW_EVENT(BRANCH_MISSES),                  "miss/element",   [](double val, double cycles, size_t sum) -> double { return val / sum;          } },
+  { HW_EVENT(BRANCH_MISSES),                  "miss/elem",      [](double val, double cycles, size_t sum) -> double { return val / sum;          } },
   // { {PERF_TYPE_RAW, EVENT_L1D_REPL,        }, "l1 repl/element",[](double val, double cycles, size_t sum) -> double { return val / sum;    } },
   // { {PERF_TYPE_RAW, EVENT_UOPS_ISSUED,     }, "uops/cycle",     [](double val, double cycles, size_t sum) -> double { return val / cycles; } },
   { {PERF_TYPE_RAW, EVENT_UOPS_ISSUED,     }, "uops/elem",      [](double val, double cycles, size_t sum) -> double { return val / sum; } },
   // { {PERF_TYPE_RAW, EVENT_PEND_MISS,       }, "pmiss/elem",     [](double val, double cycles, size_t sum) -> double { return val / sum; } },
   // { {PERF_TYPE_RAW, EVENT_PEND_MISS_CYCLES,}, "pmiss_cyc/elem", [](double val, double cycles, size_t sum) -> double { return val / sum; } },
 
-  // { {PERF_TYPE_RAW, EVENT_P0_UOPS,     }, "p0_ops/elem",        [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  { {PERF_TYPE_RAW, EVENT_P0_UOPS,     }, "p0_ops/elem",        [](double val, double cycles, size_t sum) -> double { return val / sum; } },
   // { {PERF_TYPE_RAW, EVENT_P1_UOPS,     }, "p1_ops/elem",        [](double val, double cycles, size_t sum) -> double { return val / sum; } },
   // { {PERF_TYPE_RAW, EVENT_P2_UOPS,     }, "p2_ops/elem",        [](double val, double cycles, size_t sum) -> double { return val / sum; } },
   // { {PERF_TYPE_RAW, EVENT_P3_UOPS,     }, "p3_ops/elem",        [](double val, double cycles, size_t sum) -> double { return val / sum; } },
   // { {PERF_TYPE_RAW, EVENT_P4_UOPS,     }, "p4_ops/elem",        [](double val, double cycles, size_t sum) -> double { return val / sum; } },
-  // { {PERF_TYPE_RAW, EVENT_P5_UOPS,     }, "p5_ops/elem",        [](double val, double cycles, size_t sum) -> double { return val / sum; } },
-  { {PERF_TYPE_RAW, EVENT_P6_UOPS,     }, "p6_ops/elem",        [](double val, double cycles, size_t sum) -> double { return val / sum; } },
-  { {PERF_TYPE_RAW, EVENT_P7_UOPS,     }, "p7_ops/elem",        [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  { {PERF_TYPE_RAW, EVENT_P5_UOPS,     }, "p5_ops/elem",        [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  // { {PERF_TYPE_RAW, EVENT_P6_UOPS,     }, "p6_ops/elem",        [](double val, double cycles, size_t sum) -> double { return val / sum; } },
+  // { {PERF_TYPE_RAW, EVENT_P7_UOPS,     }, "p7_ops/elem",        [](double val, double cycles, size_t sum) -> double { return val / sum; } },
 
 
   { {PERF_TYPE_SOFTWARE, PERF_COUNT_SW_TASK_CLOCK}, "GHz", [](double val, double cycles, size_t sum) -> double { return cycles / val; } }
