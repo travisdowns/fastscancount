@@ -102,7 +102,7 @@ public:
 
         auto [c1_0, s1_0] = traits::add3(c0_0, c0_1, c0_2);
 
-        // output is s0_2, s1_0, c1_0 with weight 0, 1, 2
+        // output is v7, s0_2, s1_0, c1_0 with weight 0, 0, 1, 2
         accept_weighted(v7, s0_2, s1_0, c1_0);
     }
 
