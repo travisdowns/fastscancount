@@ -28,7 +28,7 @@
 
 /* the number of times to run each benchmark in demo mode */
 #define REPEATS 2
-#define START_THRESHOLD  3
+#define START_THRESHOLD  5
 #define END_THRESHOLD   11
 
 
