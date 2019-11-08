@@ -218,16 +218,20 @@ override_middle_asm_3:
         push    r13
         push    r12
         push    rbx
-        and     rsp, -64
+
         mov     qword [rsp-8H], r8
+
+        ; load element pointers
         mov     r14, qword [rdx]
         mov     r13, qword [rdx+8H]
         mov     r12, qword [rdx+10H]
         mov     rbx, qword [rdx+18H]
+
         mov     r11, qword [rdx+20H]
         mov     r10, qword [rdx+28H]
         mov     r9, qword [rdx+30H]
         mov     r8, qword [rdx+38H]
+
         cmp     rcx, rax
         jnc     .done
 
@@ -265,6 +269,7 @@ ALIGN 64
         vpexpandd zmm2 {k1}{z}, zword [r14]
         popcnt  rdx, rdx
         lea     r14, [r14+rdx*4]
+
         mov     rdx, qword [rsp-30H]
         vmovdqa64 zmm0, zmm2
         movzx   edx, word [rdx+rcx*2]
@@ -272,12 +277,14 @@ ALIGN 64
         vpexpandd zmm5 {k2}{z}, zword [r13]
         popcnt  rdx, rdx
         lea     r13, [r13+rdx*4]
+
         mov     rdx, qword [rsp-28H]
         movzx   edx, word [rdx+rcx*2]
         kmovw   k3, edx
         vpexpandd zmm8 {k3}{z}, zword [r12]
         popcnt  rdx, rdx
         lea     r12, [r12+rdx*4]
+
         mov     rdx, qword [rsp-20H]
         vpternlogd zmm2, zmm5, zmm8, 96H
         movzx   edx, word [rdx+rcx*2]
@@ -286,6 +293,7 @@ ALIGN 64
         vpexpandd zmm3 {k4}{z}, zword [rbx]
         popcnt  rdx, rdx
         lea     rbx, [rbx+rdx*4]
+
         mov     rdx, qword [rsp-18H]
         vmovdqa64 zmm5, zmm3
         movzx   edx, word [rdx+rcx*2]
@@ -293,12 +301,14 @@ ALIGN 64
         vpexpandd zmm6 {k5}{z}, zword [r11]
         popcnt  rdx, rdx
         lea     r11, [r11+rdx*4]
+
         mov     rdx, qword [rsp-10H]
         movzx   edx, word [rdx+rcx*2]
         kmovw   k6, edx
         vpexpandd zmm7 {k6}{z}, zword [r10]
         popcnt  rdx, rdx
         lea     r10, [r10+rdx*4]
+
         movzx   edx, word [r15+rcx*2]
         vpternlogd zmm5, zmm6, zmm7, 0E8H
         kmovw   k7, edx
@@ -307,6 +317,7 @@ ALIGN 64
         popcnt  rdx, rdx
         vmovdqa64 zmm6, zmm1
         lea     r9, [r9+rdx*4]
+
         movzx   edx, word [rsi+rcx*2]
         vpternlogd zmm1, zmm2, zmm3, 96H
         vpternlogd zmm6, zmm2, zmm3, 0E8H
@@ -349,6 +360,7 @@ ALIGN 64
         mov     qword [rdx+28H], r10
         mov     qword [rdx+30H], r9
         mov     qword [rdx+38H], r8
+
         lea     rsp, [rbp-28H]
         pop     rbx
         pop     r12
