@@ -138,6 +138,13 @@ void bitscan_fake2(const data_ptrs &, std::vector<uint32_t> &out,
 
 #ifdef __AVX512F__
 
+inline fastbitset<512> to_bitset(__m512i v) {
+    static_assert(sizeof(fastbitset<512>) * 8 == 512);
+    fastbitset<512> ret;
+    _mm512_storeu_si512(&ret, v);
+    return ret;
+}
+
 template <typename T>
 void bitscan_avx512(const data_ptrs &, std::vector<uint32_t> &out,
                 uint8_t threshold, const bitscan_all_aux<T>& aux_info,
@@ -168,7 +175,7 @@ struct m512_traits {
 
     static bool test(const T& v, size_t idx) {
         auto bitset = to_bitset(v);
-        return bitset[idx];
+        return bitset.test(idx);
     }
 
     static size_t size() {
@@ -176,7 +183,7 @@ struct m512_traits {
     }
 
     static bool zero(const T& v) {
-        return to_bitset(v).none();
+        return _mm512_cmpneq_epu32_mask(v, _mm512_setzero_si512()) == 0;
     }
 
     struct cs {
