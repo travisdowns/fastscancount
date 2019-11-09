@@ -28,6 +28,10 @@ struct traits_base {
             B::or_(B::and_(a, b), B::and_(c, xor01)), // carry
             B::xor_(xor01, c) };                // sum
     }
+
+    static void store(T& lhs, const T& rhs) {
+        lhs = rhs;
+    }
 };
 
 template <typename T>
@@ -60,6 +64,8 @@ struct default_traits : traits_base<T, default_traits<T>> {
  */
 template <size_t B, typename T, typename traits>
 class accumulator {
+
+    using this_t = accumulator<B, T, traits>;
 
     std::array<T,B> bits;
     T sat;
@@ -178,6 +184,13 @@ public:
 
     T get_saturated() {
         return sat;
+    }
+
+    void operator=(const this_t& rhs) {
+        for (size_t b = 0; b < bits.size(); b++) {
+            bits[b] = rhs.bits[b];
+        }
+        sat = rhs.sat;
     }
 };
 

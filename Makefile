@@ -31,7 +31,7 @@ MAKE_DEPS := Makefile $(wildcard local.mk)
 CXX_RULE = $(CXX) $(CXXFLAGS) $(CXXEXTRA) -c $< -o $@ -Iinclude -Iinclude/boost
 
 # $(info SRC=$(SRC))
-# $(info OBJ=$(OBJ))
+$(info OBJ=$(OBJ))
 # $(info TEST_OBJ=$(TEST_OBJ))
 # $(info DEPS=$(DEPS))
 
@@ -55,7 +55,7 @@ test/%.o : test/%.cpp $(MAKE_DEPS)
 	$(CXX_RULE)
 
 src/%.o: src/%.asm $(MAKE_DEPS)
-	$(NASM) $(NASMFLAGS) -felf64 $<
+	$(NASM) $(NASMFLAGS) $(NASMEXTRA) -felf64 $<
 
 clean:
 	rm -f counter unit-test src/*.[od] benchmark/*.[od] test/*.[od]

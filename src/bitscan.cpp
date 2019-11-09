@@ -7,6 +7,13 @@
 
 namespace fastscancount {
 
+#ifndef CHUNKS_PER_PASS
+#define CHUNKS_PER_PASS 512
+#endif
+
+constexpr size_t chunks_per_pass = CHUNKS_PER_PASS;
+constexpr size_t prefetch_distance = 256;
+
 using query_type = std::vector<uint32_t>;
 using out_type = std::vector<uint32_t>;
 
@@ -157,6 +164,9 @@ void handle_middle(
         #define BODY(i,_) auto e##i = traits::expand(*bitmaps[i], c, eptr_##i);
         UNROLL_X(BODY,_);
 
+        #define PREFETCH(i,_) __builtin_prefetch(eptr_##i + prefetch_distance/sizeof(*eptr_##i), 0, 3);
+        UNROLL_X(PREFETCH,_);
+
         assert(c - start_chunk < accums.size());
         accums[c - start_chunk].accept8(e0, e1, e2, e3, e4, e5, e6, e7);
     }
@@ -200,10 +210,15 @@ template <>
 void avx512_traits_asm::override_middle<3>( MIDDLE_ARGS(3) ) {
     override_middle_asm_3(accums, bitmaps, eptrs, start_chunk, end_chunk);
 }
-
-
-
 #endif
+
+template <typename A>
+HEDLEY_NEVER_INLINE
+void do_accum_init(A* HEDLEY_RESTRICT accums, size_t size, A accum_init) {
+    for (size_t i = 0; i < size; i++) {
+        accums[i] = accum_init;
+    }
+}
 
 template <size_t THRESHOLD, typename traits>
 void bitscan_generic(out_type& out,
@@ -218,7 +233,6 @@ void bitscan_generic(out_type& out,
 
     const size_t array_count = query.size();
     const size_t total_chunk_count = aux_info.get_chunk_count();
-    constexpr size_t chunks_per_pass = 128;
 
     atype accum_init(atype::max - THRESHOLD - 1);
 
@@ -237,14 +251,14 @@ void bitscan_generic(out_type& out,
     }
 
     std::vector<atype> accums;
-    // accums.resize(pass_chunk_count, accum_init);
 
     for (size_t start_chunk = 0; start_chunk < total_chunk_count; start_chunk += chunks_per_pass) {
 
         const size_t pass_chunk_count = std::min(chunks_per_pass, total_chunk_count - start_chunk);
         const size_t end_chunk = start_chunk + pass_chunk_count;
 
-        accums.assign(pass_chunk_count, accum_init);
+        accums.resize(pass_chunk_count, accum_init);
+        do_accum_init(accums.data(), accums.size(), accum_init);
 
         // we take queries in blocks of 8
         constexpr size_t stream_count = 8;

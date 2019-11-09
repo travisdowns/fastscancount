@@ -231,11 +231,11 @@ void bench(F f, const std::string &name,
            float& elapsed,
            std::vector<uint32_t> &answer, size_t sum, size_t expected,
            bool print) {
-  WallClockTimer tm;
   unified.start();
+  WallClockTimer tm;
   f();
-  unified.end();
   elapsed += tm.split();
+  unified.end();
   if (answer.size() != expected)
     std::cerr << "bug: expected " << expected << " but got " << answer.size()
               << "\n";
@@ -366,7 +366,7 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
     // BENCHTEST(bitscan_fake2,  "bitscan_fake2", dummy, bitscan_aux32, query_elem);
 
 #ifdef __AVX2__
-    // BENCHTEST(fastscancount_avx2, "AVX2-based scancount", elapsed_avx);
+    BENCHTEST(fastscancount_avx2, "AVX2-based scancount", elapsed_avx);
 
     // BENCHTEST(fastscancount_avx2b32<fastscancount::record_hits_c>, "Try2 AVX2 in C", dummy, avx2b_aux32, query_elem);
 
@@ -380,7 +380,7 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
 #ifdef __AVX512F__
     BENCHTEST(bitscan_avx512,     "bitscan_avx512", elapsed_bitscan, bitscan_aux32, query_elem);
     BENCHTEST(bitscan_avx512_asm, "bitscan_avx512_asm", elapsed_bitscan_asm, bitscan_aux32, query_elem);
-    BENCHTEST(fastscancount_avx512, "AVX512-based scancount", elapsed_avx512, range_size_avx512, range_ptrs);
+    // BENCHTEST(fastscancount_avx512, "AVX512-based scancount", elapsed_avx512, range_size_avx512, range_ptrs);
 #endif
   }
 

@@ -221,16 +221,21 @@ override_middle_asm_3:
 
         mov     qword [rsp-8H], r8
 
-        ; load element pointers
-        mov     r14, qword [rdx]
-        mov     r13, qword [rdx+8H]
-        mov     r12, qword [rdx+10H]
-        mov     rbx, qword [rdx+18H]
+%macro load_and_pf 2
+        mov             %1, %2
+        ;prefetcht0      [%1]
+        ;prefetcht0      [%1 + 64]
+%endmacro
 
-        mov     r11, qword [rdx+20H]
-        mov     r10, qword [rdx+28H]
-        mov     r9, qword [rdx+30H]
-        mov     r8, qword [rdx+38H]
+        ; load 8 element pointers
+        load_and_pf     r14,  [rdx]
+        load_and_pf     r13,  [rdx+8H]
+        load_and_pf     r12,  [rdx+10H]
+        load_and_pf     rbx,  [rdx+18H]
+        load_and_pf     r11,  [rdx+20H]
+        load_and_pf     r10,  [rdx+28H]
+        load_and_pf     r9,   [rdx+30H]
+        load_and_pf     r8,   [rdx+38H]
 
         cmp     rcx, rax
         jnc     .done
@@ -286,9 +291,7 @@ ALIGN 64
         lea     r12, [r12+rdx*4]
 
         mov     rdx, qword [rsp-20H]
-        vpternlogd zmm2, zmm5, zmm8, 0x96
         movzx   edx, word [rdx+rcx*2]
-        vpternlogd zmm0, zmm5, zmm8, 0xE8
         kmovw   k4, edx
         vpexpandd zmm3 {k4}{z}, zword [rbx]
         popcnt  rdx, rdx
@@ -314,12 +317,32 @@ ALIGN 64
         popcnt  rdx, rdx
         lea     r9, [r9+rdx*4]
 
-
         movzx   edx, word [rsi+rcx*2]
         kmovw   k1, edx
         vpexpandd zmm4 {k1}{z}, zword [r8]
         popcnt  rdx, rdx
         lea     r8, [r8+rdx*4]
+
+%ifndef pf_offset
+%define pf_offset 256
+%endif
+%ifndef pf_instr
+%define pf_instr prefetcht0
+%endif
+
+%warning 'pf offset' pf_offset ' pf_instr' pf_instr
+
+        pf_instr [r14 + pf_offset]
+        pf_instr [r13 + pf_offset]
+        pf_instr [r12 + pf_offset]
+        pf_instr [rbx + pf_offset]
+        pf_instr [r11 + pf_offset]
+        pf_instr [r10 + pf_offset]
+        pf_instr [r9  + pf_offset]
+        pf_instr [r8  + pf_offset]
+
+        vpternlogd zmm2, zmm5, zmm8, 0x96
+        vpternlogd zmm0, zmm5, zmm8, 0xE8
 
         vmovdqa64 zmm5, zmm3
         vpternlogd zmm5, zmm6, zmm7, 0xE8
