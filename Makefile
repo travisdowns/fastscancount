@@ -12,7 +12,7 @@ MARCH ?= native
 # Leo really doubts -mavx2 helps anything, but one can
 # disable avx512 tests by enforcing -mavx2
 #CXXFLAGS := -std=c++17 $(OPT) -mavx2
-CXXFLAGS := -std=c++17 $(OPT) -march=$(MARCH) -g $(NDEBUG) -MMD -Wno-ignored-attributes
+CXXFLAGS := -std=c++17 $(OPT) -march=$(MARCH) -g $(NDEBUG) -DENABLE_TIMER -MMD -Wno-ignored-attributes
 
 SRC := $(wildcard src/*.cpp src/*.asm)
 OBJ := $(SRC:.cpp=.o)

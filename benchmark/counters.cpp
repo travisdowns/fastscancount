@@ -3,6 +3,7 @@
 #include "ztimer.h"
 #include "analyze.hpp"
 #include "bitscan.hpp"
+#include "simple-timer.hpp"
 #ifdef __AVX2__
 #include "fastscancount_avx2.h"
 #include "fastscancount_avx2b.h"
@@ -12,15 +13,16 @@
 #endif
 #include "linux-perf-events-wrapper.h"
 #include "maropuparser.h"
+
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <immintrin.h>
 #include <iostream>
 #include <iomanip>
-#include <vector>
 #include <numeric>
 #include <stdexcept>
+#include <vector>
 
 /////////////////////////////
 // demo_random mode params //
@@ -32,15 +34,15 @@
 #define END_THRESHOLD   11
 
 
-//constexpr size_t DEMO_DOMAIN  =  20000000;
-//constexpr size_t DEMO_ARRAY_SIZE  = 50000;
-//constexpr size_t DEMO_ARRAY_COUNT =   100;
+constexpr size_t DEMO_DOMAIN  =  20000000;
+constexpr size_t DEMO_ARRAY_SIZE  = 50000;
+constexpr size_t DEMO_ARRAY_COUNT =   100;
 
 // fast params
 
-constexpr size_t DEMO_DOMAIN  =   200000;
-constexpr size_t DEMO_ARRAY_SIZE  = 5000;
-constexpr size_t DEMO_ARRAY_COUNT =   20;
+// constexpr size_t DEMO_DOMAIN  =   200000;
+// constexpr size_t DEMO_ARRAY_SIZE  = 5000;
+// constexpr size_t DEMO_ARRAY_COUNT =   20;
 
 //////////////////////
 // data mode params //
@@ -311,7 +313,9 @@ void demo_data(const std::vector<std::vector<uint32_t>>& data,
   calc_alldata_boundaries(data, range_boundaries, range_size_avx512);
 
   // aux data for bitscan
+  LoggingTimer timer_aux_bitscan("bitscan aux creation", stdout);
   auto bitscan_aux32 = fastscancount::get_all_aux_bitscan<uint32_t>(data);
+  timer_aux_bitscan.printElapsed();
 
   auto avx2b_aux32 = fastscancount::implb::get_all_aux<uint32_t>(data);
   auto avx2b_aux16 = fastscancount::implb::get_all_aux<uint16_t>(data);
@@ -456,7 +460,9 @@ void demo_random(size_t N, size_t length, size_t array_count, size_t threshold) 
   // auto avx2b_aux16 = fastscancount::implb::get_all_aux<uint16_t>(data);
 
   // aux data for bitscan
+  LoggingTimer timer_aux_bitscan("bitscan aux creation", stdout);
   auto bitscan_aux32 = fastscancount::get_all_aux_bitscan<uint32_t>(data);
+  timer_aux_bitscan.printElapsed();
 
   // query definition composed of all the arrays
   std::vector<uint32_t> query_elem(data.size());

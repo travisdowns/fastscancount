@@ -67,27 +67,19 @@ struct chunk_traits : traits_base<typename compressed_bitmap<U>::chunk_type, chu
     using T = typename compressed_bitmap<U>::chunk_type;
 
     static T xor_(const T& l, const T& r) {
-        T ret(l);
-        ret ^= r;
-        return ret;
+        return l ^ r;
     }
 
     static T and_(const T& l, const T& r) {
-        T ret(l);
-        ret &= r;
-        return ret;
+        return l & r;
     }
 
     static T or_(const T& l, const T& r) {
-        T ret(l);
-        ret |= r;
-        return ret;
+        return l | r;
     }
 
     static T not_(const T& v) {
-        T ret(v);
-        ret.flip();;
-        return ret;
+        return ~v;
     }
 
     static bool test(const T& v, size_t idx) {
@@ -154,15 +146,6 @@ void bitscan_avx512(const data_ptrs &, std::vector<uint32_t> &out,
 void bitscan_avx512_asm(const data_ptrs &, std::vector<uint32_t> &out,
         uint8_t threshold, const bitscan_all_aux<uint32_t>& aux_info,
         const std::vector<uint32_t>& query);
-
-
-inline boost::dynamic_bitset<> to_bitset(__m512i v) {
-    using block_type = boost::dynamic_bitset<>::block_type;
-    block_type blocks[sizeof(__m512i) / sizeof(block_type)];
-    static_assert(sizeof(blocks) == sizeof(v), "huh");
-    _mm512_storeu_si512(&blocks, v);
-    return boost::dynamic_bitset<>(blocks, blocks + sizeof(blocks) / sizeof(blocks[0]));
-}
 
 struct m512_traits {
     using T = __m512i;

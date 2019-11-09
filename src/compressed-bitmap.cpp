@@ -1,33 +1,16 @@
 
 #include "compressed-bitmap.hpp"
 #include "common.h"
-#include "boost/dynamic_bitset.hpp"
+#include "fastbitset.hpp"
 
 #include <algorithm>
 #include <assert.h>
-
-using dynbits = boost::dynamic_bitset<>;
-
-std::string to_string(const dynbits &in) {
-    std::string str;
-    to_string(in, str);
-    std::reverse(str.begin(), str.end());
-    return str;
-}
 
 template<std::size_t N>
 std::string to_string(const std::bitset<N> &in) {
     std::string str = in.to_string();
     std::reverse(str.begin(), str.end());
     return str;
-}
-
-dynbits subset(const dynbits& in, size_t from, size_t to) {
-    assert(to <= in.size());
-    assert(from <= to);
-    auto ret = in >> from;
-    ret.resize(to - from);
-    return ret;
 }
 
 template <typename T>
@@ -46,7 +29,7 @@ typename compressed_bitmap<T>::chunk_type compressed_bitmap<T>::expand(size_t id
     auto c = control.at(idx);
     while (c) {
         assert(eptr < elements.data() + elements.size());
-        auto subchunk_idx = tzcnt(c & -c) * subchunk_bits;
+        auto subchunk_idx = tzcnt(c) * subchunk_bits;
         assert(subchunk_idx < chunk_bits);
         auto elem = *eptr++;
         assert(elem); // zero element doens't make sense
@@ -78,7 +61,7 @@ compressed_bitmap<T>::compressed_bitmap(const std::vector<uint32_t>& array, uint
 
     for (size_t i = 0, lower_bound = 0; lower_bound <= largest; lower_bound += chunk_bits) {
         size_t upper_bound = lower_bound + chunk_bits;
-        chunk_type chunk;
+        fixed_chunk chunk;
         DBG(printf("Chunk %zu - %zu, elems: ", lower_bound, upper_bound));
         size_t elem_count = 0;
         while (i < array.size() && array.at(i) < upper_bound) {
@@ -99,7 +82,7 @@ compressed_bitmap<T>::compressed_bitmap(const std::vector<uint32_t>& array, uint
 #endif
         // for each bits_per_entry chunk in the bitmap
         for (size_t suboffset = 0, bit = 0; suboffset < chunk_bits; suboffset += bits_per_entry, bit++) {
-            auto sub = subset(chunk, suboffset, suboffset + bits_per_entry);
+            auto sub = chunk.subset<bits_per_entry>(suboffset);
             DBG(printf("subset: %s (%szero)\n", to_string(sub).c_str(), sub.any() ? "non" : ""));
             if (sub.any()) {  // any bit set in this subchunk?
                 elements.push_back(sub.to_ulong());

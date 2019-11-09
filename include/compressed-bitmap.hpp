@@ -1,7 +1,7 @@
 #ifndef COMPRESSED_BITMAP_H_
 #define COMPRESSED_BITMAP_H_
 
-#include "boost/dynamic_bitset.hpp"
+#include "fastbitset.hpp"
 #include "hedley.h"
 
 #include <immintrin.h>
@@ -25,11 +25,8 @@ struct compressed_bitmap {
     static constexpr size_t chunk_bits = 512;
     static constexpr size_t subchunk_bits = sizeof(T) * 8;
 
-    struct chunk_type : boost::dynamic_bitset<> {
-        chunk_type() : boost::dynamic_bitset<>(chunk_bits) {}
-        static size_t size() { return chunk_bits; }
-        const boost::dynamic_bitset<>& as_bitset() const { return static_cast<const boost::dynamic_bitset<>&>(*this); }
-    };
+    using fixed_chunk = fastbitset<chunk_bits>;
+    using chunk_type = fixed_chunk;
 
     using control_type = typename control_for<T>::type;
 
