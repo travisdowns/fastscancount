@@ -134,6 +134,7 @@ void handle_tail(
         for (size_t i = 0; i < N; i++) {
             auto e = traits::expand(*bitmaps[i], c, eptrs[i]);
             assert(c - start_chunk < accums.size());
+            __builtin_prefetch(eptrs[i] + prefetch_distance/sizeof(eptrs[0]), 0, 3);
             accums[c - start_chunk].accept(e);
         }
     }
@@ -309,7 +310,7 @@ constexpr std::array<bitscan_fn<traits> *, MAX> make_lut() {
     return ret;
 }
 
-static constexpr size_t MAX_T = 11;
+static constexpr size_t MAX_T = 16;
 
 template <typename traits>
 struct lut_holder {
