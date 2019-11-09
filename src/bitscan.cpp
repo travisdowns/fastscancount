@@ -73,16 +73,22 @@ struct avx512_traits : base_traits<E, avx512_traits<E>> {
     }
 
     static void populate_hits(const chunk_type& flags, uint32_t offset, out_type& out) {
+        if (HEDLEY_LIKELY(_mm512_test_epi32_mask(flags, flags) == 0)) {
+            return;
+        }
         auto flags64 = to_array<uint64_t>(flags);
         assert(flags64.size() * 64 == base::chunk_bits);
+        // size_t hits = 0;
         for (auto f : flags64) {
             while (f) {
+                // hits++;
                 uint32_t idx = __builtin_ctzl(f);
                 out.push_back(idx + offset);
                 f &= (f - 1);
             }
             offset += 64;
         }
+        // printf("chunk had %zu hits\n", hits);
     }
 };
 
@@ -92,8 +98,7 @@ template <typename traits, typename A>
 HEDLEY_NEVER_INLINE
 void generic_populate_hits(std::vector<A>& accums, out_type& out, size_t offset) {
     for (auto& accum : accums) {
-        auto satflags = accum.get_saturated();
-        traits::populate_hits(satflags, offset, out);
+        traits::populate_hits(accum.get_saturated(), offset, out);
         offset += traits::chunk_bits;
     }
 }
