@@ -31,7 +31,7 @@ MAKE_DEPS := Makefile $(wildcard local.mk)
 CXX_RULE = $(CXX) $(CXXFLAGS) $(CXXEXTRA) -c $< -o $@ -Iinclude -Iinclude/boost
 
 # $(info SRC=$(SRC))
-$(info OBJ=$(OBJ))
+# $(info OBJ=$(OBJ))
 # $(info TEST_OBJ=$(TEST_OBJ))
 # $(info DEPS=$(DEPS))
 

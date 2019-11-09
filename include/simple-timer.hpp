@@ -98,9 +98,11 @@ public:
 
     void printElapsed() {
 #ifndef DISABLE_TIMER
-        double ms = elapsedNanos() / 1000000.0;
-        std::fprintf(file_, "%-*s: %7.4f ms\n", nameWidth, message_.c_str(), ms);
-        printed_ = true;
+        if (file_) {
+            double ms = elapsedNanos() / 1000000.0;
+            std::fprintf(file_, "%-*s: %7.4f ms\n", nameWidth, message_.c_str(), ms);
+            printed_ = true;
+        }
 #endif
     }
 
